@@ -1,5 +1,3 @@
-#include <Wire.h>
-
 /*
   Управление соляриями
 */
@@ -15,10 +13,11 @@ const byte buttonPin_Service = 13;                  // номер входа, п
 const byte LEDPin = 14;                             // номер выхода светодиода кнопки Старт, DB13
 //const byte RelayPin = 17;                           // номер выхода, подключенный к реле, А3
 const byte Device_SerNum = 1;                       // серийный номер устройства
-const char Device_Ver[] = "0.0";                    // версия ПО устройства
-const char Device_Date[] = "09/09/24";              // дата производства устройства
+const PROGMEM char Device_Ver[] = "0.0";                    // версия ПО устройства
+const PROGMEM char Device_Date[] = "09/09/24";              // дата производства устройства
 const unsigned long block = 500000;                 // блокировка устройства при превышении этой суммы денег
 
+//======Переменные обработки клавиш=================
 boolean lastReading = false;                        // флаг предыдущего состояния кнопки
 boolean buttonSingle = false;                       // флаг состояния "краткое нажатие"
 boolean buttonDouble = false;                       // флаг состояния "двойное нажатие"
@@ -31,9 +30,18 @@ const int bounceTime = 10;                          // задержка для �
 const int holdTime = 1000;                          // время, в течение которого нажатие можно считать удержанием кнопки
 const int doubleTime = 500;                         // время, в течение которого нажатия можно считать двойным
 
+//======Переменные меню=============================
+boolean menu_enable = false;                        // изначально не в МЕНЮ
+byte menu_index = 0;
+byte last_menu_index = 0;
+byte line_index = 1;
+byte cursor_index = 1;
+byte last_cursor_index = 0;
+byte show_window_first_line = 0;
+
 // ============================== Описываем свой символ "Рубль" ========================================================================
 // Просто "рисуем" символ единицами. Единицы при выводе на экран окажутся закрашенными точками, нули - не закрашенными
-byte rubl[8] = {
+const PROGMEM byte rubl[8] = {
   0b00000,
   0b01110,
   0b01001,
@@ -44,7 +52,7 @@ byte rubl[8] = {
   0b01000,
 };
 
-LiquidCrystal_I2C lcd(0x27, 16, 2);                 // устанавливаем адрес 0x27, и дисплей 16 символов 2 строки
+LiquidCrystal_I2C lcd(0x27, 20, 4);                 // устанавливаем адрес 0x27, и дисплей 16 символов 2 строки
 
 void setup() {
   Serial.begin(115200);
@@ -76,7 +84,6 @@ void read_buttons(byte x)
     if ((millis() - onTime) > holdTime)
     {
       buttonHold = true;
-      //digitalWrite(LEDPin, HIGH);                 // при удержании кнопки загорается светодиод
       digitalWrite(LEDPin, !digitalRead(LEDPin));   // при удержании кнопки мигает светодиод
     }
   }
@@ -114,26 +121,221 @@ void read_buttons(byte x)
   }
 }
 
+#define SIZE_SCREEN 4
+
+enum type_menu_line {
+  MENU_LINE,
+  TEXT_LINE,
+  PARAM_LINE,
+  FIXED_LINE,
+};
+
+struct menu_line {
+  char string[20];
+  type_menu_line type;
+  byte next_menu_index;
+};
+
+struct menu_screen {
+    menu_line menu_lines[5];
+    byte count_lines;
+};
+
+const menu_screen menu_all[] = {
+  // Меню 0
+  {
+    {
+      {
+        "    MAIN MENU   ",
+        FIXED_LINE,
+        0
+      },
+      {
+        "Settings        ",
+        MENU_LINE,
+        1
+      },
+      {
+        "Statistic        ",
+        MENU_LINE,
+        2
+      }
+    },
+    3
+  },
+  // Меню 1
+  {
+    {
+      {
+        "    SETTINGS   ",
+        FIXED_LINE,
+        0
+      },
+      {
+        "Solarium        ",
+        MENU_LINE,
+        1
+      },
+      {
+        "Bank            ",
+        MENU_LINE,
+        2
+      },
+      {
+        "Password         ",
+        MENU_LINE,
+        2
+      },
+      {
+        "Reset             ",
+        MENU_LINE,
+        2
+      }
+    },
+    5
+  },
+  // Меню 2
+  {
+    {
+      {
+        "    STATISTIC   ",
+        FIXED_LINE,
+        0
+      },
+      {
+        "Long counters    ",
+        MENU_LINE,
+        1
+      },
+      {
+        "Short counters    ",
+        MENU_LINE,
+        2
+      }
+    },
+    3
+  },
+};
+
 // ============================== удержание кнопки ===============================================================================
 void isButtonHold()
 {
-  Serial.println( F("isButtonHold") );
+  if(!menu_enable)
+  {
+      menu_index = 0;
+      menu_enable = true;
+  }
+  else
+  {
+      if(menu_index == 0) 
+      {
+          menu_enable = false;
+      }
+      else
+      {
+          menu_index = last_menu_index;
+          lcd.clear();
+      }
+  }
 }
 
 // ============================== одиночное нажатие кнопки ========================================================================
 void isButtonSingle() 
 {
-  Serial.println( F("isButtonSingle") );
+  last_cursor_index = cursor_index;
+  cursor_index++;
+  line_index++;
+
+  Serial.print(menu_all[menu_index].count_lines);
+
+  if(cursor_index >= SIZE_SCREEN || cursor_index >= menu_all[menu_index].count_lines)
+  {
+    cursor_index = SIZE_SCREEN - 1;
+    show_window_first_line++;
+
+    if(line_index >= menu_all[menu_index].count_lines)
+    {
+        byte cursor = 0;
+        for(cursor = 0; cursor < menu_all[menu_index].count_lines; cursor++)
+        {
+            if(menu_all[menu_index].menu_lines[cursor].type != FIXED_LINE) break;
+        }
+        cursor_index = (cursor_index >= SIZE_SCREEN ) ? SIZE_SCREEN - 1 : cursor;
+        line_index = cursor;
+        show_window_first_line = 0;
+    }
+  }
 }
 
 // ================================ двойное нажатие кнопки ========================================================================
 void isButtonDouble() 
 {
-  Serial.println( F("isButtonDouble") );
+    if(menu_all[menu_index].menu_lines[line_index].type == MENU_LINE)
+    {
+        last_menu_index = menu_index;
+        menu_index = menu_all[menu_index].menu_lines[line_index].next_menu_index;
+        lcd.clear();
+    }    
+}
+
+void show_line(byte index_line)
+{
+    lcd.print(menu_all[menu_index].menu_lines[index_line].string);
+}
+
+void show_menu()
+{
+    for(byte i = 0; i < menu_all[menu_index].count_lines; i++)
+    {
+        if(show_window_first_line != 0 && i < show_window_first_line) continue;
+        if(i >= show_window_first_line + SIZE_SCREEN) break;
+
+        lcd.setCursor(1, i - show_window_first_line);
+        show_line(i);
+    }
+}
+
+void show_cursor() 
+{
+    lcd.setCursor(0, last_cursor_index);
+    lcd.print(F(" "));
+    lcd.setCursor(0, cursor_index);
+    lcd.print(F(">"));
+}
+
+// ============================== процедура прорисовки меню и изменения значения параметров =======================================
+void menu ()  
+{
+  lcd.clear();
+  digitalWrite(LEDPin, HIGH);
+  while (menu_enable == true)
+  {
+      read_buttons(buttonPin_Service);
+      //lcd.setCursor(0,0);
+
+      show_menu();
+      show_cursor();
+  }
+
+  lcd.clear();
+  digitalWrite(LEDPin, LOW);
 }
 
 void loop() {
-
   read_buttons(buttonPin_Service);
-
+  if (menu_enable == true)                          // если флаг menu_enable = ИСТИНА, то входим в меню 
+  {
+    menu();  
+  }
+  else
+  { 
+    /*if (bill_enable == true && menu_enable == false)  
+    {
+      get_money ();                                 // принимаем деньги
+    }*/
+  }
+  /*if (bill_enable == false && menu_enable == false)
+  {
+    countdown_timer(sek, minu);                     // запускаем таймер обратного отсчета
+  }*/
 }
