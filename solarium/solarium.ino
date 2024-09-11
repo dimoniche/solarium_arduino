@@ -31,13 +31,18 @@ const int holdTime = 1000;                          // время, в течен
 const int doubleTime = 500;                         // время, в течение которого нажатия можно считать двойным
 
 //======Переменные меню=============================
+#define MENU_INTER_COUNT      5                     // количество возможных вложений меню
+#define SIZE_SCREEN           4                     // количество строк на экране
+#define SIZE_SCREEN_LINE      20                    // количество символов в строке на экране
+
 boolean menu_enable = false;                        // изначально не в МЕНЮ
-byte menu_index = 0;
-byte last_menu_index = 0;
-byte line_index = 1;
-byte cursor_index = 1;
-byte last_cursor_index = 0;
-byte show_window_first_line = 0;
+byte menu_index = 0;                                // текущий номер меню
+byte menu_inter = 0;                                // индекс вложенности меню
+byte last_menu_index[MENU_INTER_COUNT];             // стек переходов по меню
+byte line_index = 1;                                // текущая выбранная строка меню
+byte cursor_index = 1;                              // положение курсора на экране
+byte last_cursor_index = 0;                         // предпоследнее положение курсора на экране
+byte show_window_first_line = 0;                    // индекс первой отображаемой строки меню на экране
 
 // ============================== Описываем свой символ "Рубль" ========================================================================
 // Просто "рисуем" символ единицами. Единицы при выводе на экран окажутся закрашенными точками, нули - не закрашенными
@@ -52,7 +57,7 @@ const PROGMEM byte rubl[8] = {
   0b01000,
 };
 
-LiquidCrystal_I2C lcd(0x27, 20, 4);                 // устанавливаем адрес 0x27, и дисплей 16 символов 2 строки
+LiquidCrystal_I2C lcd(0x27, SIZE_SCREEN_LINE, SIZE_SCREEN);                 // устанавливаем адрес 0x27, и дисплей 16 символов 2 строки
 
 void setup() {
   Serial.begin(115200);
@@ -121,8 +126,6 @@ void read_buttons(byte x)
   }
 }
 
-#define SIZE_SCREEN 4
-
 enum type_menu_line {
   MENU_LINE,
   TEXT_LINE,
@@ -131,7 +134,7 @@ enum type_menu_line {
 };
 
 struct menu_line {
-  char string[20];
+  char string[SIZE_SCREEN_LINE];
   type_menu_line type;
   byte next_menu_index;
 };
@@ -141,7 +144,13 @@ struct menu_screen {
     byte count_lines;
 };
 
-const menu_screen menu_all[] = {
+// текущее меню
+menu_screen current_menu_screen;
+
+/*
+  описание меню
+*/
+const menu_screen menu_all[] PROGMEM = {
   // Меню 0
   {
     {
@@ -217,12 +226,30 @@ const menu_screen menu_all[] = {
   },
 };
 
-// ============================== удержание кнопки ===============================================================================
+void find_first_line_menu()
+{
+  byte cursor = 0;
+  for(cursor = 0; cursor < current_menu_screen.count_lines; cursor++)
+  {
+      if(current_menu_screen.menu_lines[cursor].type != FIXED_LINE) break;
+  }
+  cursor_index = (cursor_index >= SIZE_SCREEN ) ? SIZE_SCREEN - 1 : cursor;
+  line_index = cursor;
+  show_window_first_line = 0;
+}
+
+/*
+  удержание кнопки
+*/
 void isButtonHold()
 {
   if(!menu_enable)
   {
       menu_index = 0;
+
+      memcpy_P( &current_menu_screen, &menu_all[menu_index], sizeof(menu_screen));
+      find_first_line_menu();
+
       menu_enable = true;
   }
   else
@@ -233,59 +260,66 @@ void isButtonHold()
       }
       else
       {
-          menu_index = last_menu_index;
+          menu_index = last_menu_index[menu_inter];
+          menu_inter--;
+
+          memcpy_P( &current_menu_screen, &menu_all[menu_index], sizeof(menu_screen));
+          find_first_line_menu();
+
           lcd.clear();
       }
   }
 }
 
-// ============================== одиночное нажатие кнопки ========================================================================
+/*
+  одиночное нажатие кнопки
+*/
 void isButtonSingle() 
 {
   last_cursor_index = cursor_index;
   cursor_index++;
   line_index++;
 
-  Serial.print(menu_all[menu_index].count_lines);
-
-  if(cursor_index >= SIZE_SCREEN || cursor_index >= menu_all[menu_index].count_lines)
+  if(cursor_index >= SIZE_SCREEN || cursor_index >= current_menu_screen.count_lines)
   {
     cursor_index = SIZE_SCREEN - 1;
     show_window_first_line++;
 
-    if(line_index >= menu_all[menu_index].count_lines)
+    if(line_index >= current_menu_screen.count_lines)
     {
-        byte cursor = 0;
-        for(cursor = 0; cursor < menu_all[menu_index].count_lines; cursor++)
-        {
-            if(menu_all[menu_index].menu_lines[cursor].type != FIXED_LINE) break;
-        }
-        cursor_index = (cursor_index >= SIZE_SCREEN ) ? SIZE_SCREEN - 1 : cursor;
-        line_index = cursor;
-        show_window_first_line = 0;
+        find_first_line_menu();
     }
   }
 }
 
-// ================================ двойное нажатие кнопки ========================================================================
+/*
+  двойное нажатие кнопки
+*/
 void isButtonDouble() 
 {
-    if(menu_all[menu_index].menu_lines[line_index].type == MENU_LINE)
+    if(current_menu_screen.menu_lines[line_index].type == MENU_LINE)
     {
-        last_menu_index = menu_index;
-        menu_index = menu_all[menu_index].menu_lines[line_index].next_menu_index;
+        last_menu_index[menu_inter] = menu_index;
+        menu_inter++;
+        menu_index = current_menu_screen.menu_lines[line_index].next_menu_index;
+
+        memcpy_P( &current_menu_screen, &menu_all[menu_index], sizeof(menu_screen));
+        find_first_line_menu();
         lcd.clear();
     }    
 }
 
 void show_line(byte index_line)
 {
-    lcd.print(menu_all[menu_index].menu_lines[index_line].string);
+    lcd.print(current_menu_screen.menu_lines[index_line].string);
 }
 
+/*
+  Отображение текущего кадра меню
+*/
 void show_menu()
 {
-    for(byte i = 0; i < menu_all[menu_index].count_lines; i++)
+    for(byte i = 0; i < current_menu_screen.count_lines; i++)
     {
         if(show_window_first_line != 0 && i < show_window_first_line) continue;
         if(i >= show_window_first_line + SIZE_SCREEN) break;
@@ -295,6 +329,9 @@ void show_menu()
     }
 }
 
+/*
+  Отображение курсора в текущем положении
+*/
 void show_cursor() 
 {
     lcd.setCursor(0, last_cursor_index);
