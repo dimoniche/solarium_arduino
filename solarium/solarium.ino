@@ -39,10 +39,23 @@ boolean menu_enable = false;                        // изначально не
 byte menu_index = 0;                                // текущий номер меню
 byte menu_inter = 0;                                // индекс вложенности меню
 byte last_menu_index[MENU_INTER_COUNT];             // стек переходов по меню
-byte line_index = 1;                                // текущая выбранная строка меню
+byte current_line_index = 1;                        // текущая выбранная строка меню
 byte cursor_index = 1;                              // положение курсора на экране
 byte last_cursor_index = 0;                         // предпоследнее положение курсора на экране
 byte show_window_first_line = 0;                    // индекс первой отображаемой строки меню на экране
+boolean need_reload_menu = true;
+boolean need_clear_menu = false;
+boolean need_hide_cursor = false;
+boolean start_edit_parameter = false;
+
+// Переменные для работы с соляриями
+
+byte all_parameters[10] = {11,22,50,0};
+
+#define pause_before    0
+#define pause_after     1
+#define price           2
+#define remote_start    3
 
 // ============================== Описываем свой символ "Рубль" ========================================================================
 // Просто "рисуем" символ единицами. Единицы при выводе на экран окажутся закрашенными точками, нули - не закрашенными
@@ -74,6 +87,8 @@ void setup() {
 
   digitalWrite(LEDPin,LOW);                        // изначально светодиод погашен
   digitalWrite(inhibitPin, LOW);                    // изначально разрешаем прием купюр
+
+  load_parameter();
 }
 
 void read_buttons(byte x)
@@ -126,17 +141,53 @@ void read_buttons(byte x)
   }
 }
 
+#define MAIN_MENU       0
+#define SETTING_MENU    1
+#define STATISTIC_MENU  2
+#define SOLARIUM_MENU   3
+
 enum type_menu_line {
-  MENU_LINE,
+  MENU_LINE = 0,
   TEXT_LINE,
-  PARAM_LINE,
+  DIGIT_PARAM_LINE,
   FIXED_LINE,
+  LIST_PARAM_LINE,
+};
+
+struct param_limit {
+    byte min;
+    byte max;
+    byte default_value;
+};
+
+struct parameter_menu {
+  byte next_menu_index;
+};
+
+struct parameter_digit {
+  byte param_index;
+  param_limit limit;
+  char unit[5];
+};
+
+struct parameter_list {
+  byte param_index;
+  param_limit limit;
+
+  char list_data[10][4];
+};
+
+union param_data {
+    parameter_list list;
+    parameter_digit digit;
+    parameter_menu menu;
 };
 
 struct menu_line {
   char string[SIZE_SCREEN_LINE];
   type_menu_line type;
-  byte next_menu_index;
+  
+  param_data parameter;
 };
 
 struct menu_screen {
@@ -155,19 +206,19 @@ const menu_screen menu_all[] PROGMEM = {
   {
     {
       {
-        "    MAIN MENU   ",
+        "    MAIN MENU",
         FIXED_LINE,
-        0
+        {0}
       },
       {
-        "Settings        ",
+        "Settings",
         MENU_LINE,
-        1
+        {SETTING_MENU}
       },
       {
-        "Statistic        ",
+        "Statistic",
         MENU_LINE,
-        2
+        {STATISTIC_MENU}
       }
     },
     3
@@ -176,29 +227,29 @@ const menu_screen menu_all[] PROGMEM = {
   {
     {
       {
-        "    SETTINGS   ",
+        "    SETTINGS",
         FIXED_LINE,
-        0
+        {0}
       },
       {
-        "Solarium        ",
+        "Solarium",
         MENU_LINE,
-        1
+        {SOLARIUM_MENU}
       },
       {
-        "Bank            ",
+        "Bank",
         MENU_LINE,
-        2
+        {2}
       },
       {
-        "Password         ",
+        "Password",
         MENU_LINE,
-        2
+        {2}
       },
       {
-        "Reset             ",
+        "Reset",
         MENU_LINE,
-        2
+        {2}
       }
     },
     5
@@ -207,22 +258,88 @@ const menu_screen menu_all[] PROGMEM = {
   {
     {
       {
-        "    STATISTIC   ",
+        "    STATISTIC",
         FIXED_LINE,
-        0
+        {0}
       },
       {
-        "Long counters    ",
+        "Long counters",
         MENU_LINE,
-        1
+        {1}
       },
       {
-        "Short counters    ",
+        "Short counters",
         MENU_LINE,
-        2
+        {2}
       }
     },
     3
+  },
+  // Меню 3
+  {
+    {
+      {
+        "    DEVICE",
+        FIXED_LINE,
+        {1}
+      },
+      {
+        "Pause before",
+        DIGIT_PARAM_LINE,
+        {
+          pause_before,
+          {
+              0,
+              100,
+              30
+          },
+          "sec"
+        }
+      },
+      {
+        "Pause after",
+        DIGIT_PARAM_LINE,
+        {
+          pause_after,
+          {
+              0,
+              3,
+              3
+          },
+          "min"
+        }
+      },
+      {
+        "Price",
+        DIGIT_PARAM_LINE,
+        {
+          price,
+          {
+              0,
+              100,
+              20
+          },
+          "rub"
+        }
+      },
+      {
+        "Remote start",
+        LIST_PARAM_LINE,
+        {
+          remote_start,
+          {
+              0,
+              1,
+              0
+          },
+          {
+              "Off",
+              "On "
+          }
+        }
+      } 
+    },
+    5
   },
 };
 
@@ -234,8 +351,24 @@ void find_first_line_menu()
       if(current_menu_screen.menu_lines[cursor].type != FIXED_LINE) break;
   }
   cursor_index = (cursor_index >= SIZE_SCREEN ) ? SIZE_SCREEN - 1 : cursor;
-  line_index = cursor;
+  current_line_index = cursor;
   show_window_first_line = 0;
+}
+
+/*
+  Загрузка параметров из памяти
+*/
+void load_parameter()
+{
+
+}
+
+/*
+  Сохранение параметра в память
+*/
+void save_parameter(byte index_param)
+{
+
 }
 
 /*
@@ -243,9 +376,11 @@ void find_first_line_menu()
 */
 void isButtonHold()
 {
+  need_reload_menu = true;
+
   if(!menu_enable)
   {
-      menu_index = 0;
+      menu_index = MAIN_MENU;
 
       memcpy_P( &current_menu_screen, &menu_all[menu_index], sizeof(menu_screen));
       find_first_line_menu();
@@ -254,19 +389,36 @@ void isButtonHold()
   }
   else
   {
-      if(menu_index == 0) 
+      if(start_edit_parameter)
       {
-          menu_enable = false;
+          start_edit_parameter = false;
+          need_hide_cursor = false;
+          if(current_menu_screen.menu_lines[current_line_index].type == DIGIT_PARAM_LINE)
+          {
+              save_parameter(current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index);
+          }
+          else if(current_menu_screen.menu_lines[current_line_index].type == LIST_PARAM_LINE)
+          {
+              save_parameter(current_menu_screen.menu_lines[current_line_index].parameter.list.param_index);
+          }
       }
       else
       {
-          menu_index = last_menu_index[menu_inter];
-          menu_inter--;
+          if(menu_index == MAIN_MENU) 
+          {
+              menu_enable = false;
+          }
+          else
+          {
+              menu_inter--;
+              menu_index = last_menu_index[menu_inter];
 
-          memcpy_P( &current_menu_screen, &menu_all[menu_index], sizeof(menu_screen));
-          find_first_line_menu();
+              memcpy_P( &current_menu_screen, &menu_all[menu_index], sizeof(menu_screen));
+              find_first_line_menu();
 
-          lcd.clear();
+              digitalWrite(LEDPin, HIGH);
+              lcd.clear();
+          }
       }
   }
 }
@@ -276,19 +428,42 @@ void isButtonHold()
 */
 void isButtonSingle() 
 {
-  last_cursor_index = cursor_index;
-  cursor_index++;
-  line_index++;
+  need_reload_menu = true;
 
-  if(cursor_index >= SIZE_SCREEN || cursor_index >= current_menu_screen.count_lines)
+  if(start_edit_parameter)
   {
-    cursor_index = SIZE_SCREEN - 1;
-    show_window_first_line++;
+      if(current_menu_screen.menu_lines[current_line_index].type == DIGIT_PARAM_LINE)
+      {
+          if(all_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index]++ >= current_menu_screen.menu_lines[current_line_index].parameter.digit.limit.max)
+          {
+              all_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index] = current_menu_screen.menu_lines[current_line_index].parameter.digit.limit.min;
+          }
+      }
+      else if(current_menu_screen.menu_lines[current_line_index].type == LIST_PARAM_LINE)
+      {
+          if(all_parameters[current_menu_screen.menu_lines[current_line_index].parameter.list.param_index]++ >= current_menu_screen.menu_lines[current_line_index].parameter.list.limit.max)
+          {
+              all_parameters[current_menu_screen.menu_lines[current_line_index].parameter.list.param_index] = current_menu_screen.menu_lines[current_line_index].parameter.list.limit.min;
+          }
+      }
+  }
+  else
+  {
+      last_cursor_index = cursor_index;
+      cursor_index++;
+      current_line_index++;
 
-    if(line_index >= current_menu_screen.count_lines)
-    {
-        find_first_line_menu();
-    }
+      if(cursor_index >= SIZE_SCREEN || cursor_index >= current_menu_screen.count_lines)
+      {
+        cursor_index = SIZE_SCREEN - 1;
+        show_window_first_line++;
+        need_clear_menu = true;
+
+        if(current_line_index >= current_menu_screen.count_lines)
+        {
+            find_first_line_menu();
+        }
+      }
   }
 }
 
@@ -297,21 +472,65 @@ void isButtonSingle()
 */
 void isButtonDouble() 
 {
-    if(current_menu_screen.menu_lines[line_index].type == MENU_LINE)
+    need_reload_menu = true;
+
+    if(current_menu_screen.menu_lines[current_line_index].type == MENU_LINE)
     {
         last_menu_index[menu_inter] = menu_index;
         menu_inter++;
-        menu_index = current_menu_screen.menu_lines[line_index].next_menu_index;
+        menu_index = current_menu_screen.menu_lines[current_line_index].parameter.menu.next_menu_index;
 
         memcpy_P( &current_menu_screen, &menu_all[menu_index], sizeof(menu_screen));
         find_first_line_menu();
         lcd.clear();
-    }    
+    }
+    else if(current_menu_screen.menu_lines[current_line_index].type == DIGIT_PARAM_LINE
+         || current_menu_screen.menu_lines[current_line_index].type == LIST_PARAM_LINE)
+    {
+        if(!start_edit_parameter)
+        {
+            start_edit_parameter = true;
+            hide_cursor();
+            need_hide_cursor = true;
+        }
+    } 
 }
 
 void show_line(byte index_line)
 {
-    lcd.print(current_menu_screen.menu_lines[index_line].string);
+    if(current_menu_screen.menu_lines[index_line].type == MENU_LINE)
+    {
+        lcd.print(current_menu_screen.menu_lines[index_line].string);
+    }
+    else if(current_menu_screen.menu_lines[index_line].type == FIXED_LINE)
+    {
+        lcd.print(current_menu_screen.menu_lines[index_line].string);
+    }
+    else if(current_menu_screen.menu_lines[index_line].type == DIGIT_PARAM_LINE)
+    {
+        char line[21];
+        char format[9] = "%s %d %s";
+        if(start_edit_parameter && index_line == current_line_index)
+        {
+           format[2] = '>';
+        }
+        sprintf(line,format, current_menu_screen.menu_lines[index_line].string, 
+                             all_parameters[current_menu_screen.menu_lines[index_line].parameter.digit.param_index], 
+                             current_menu_screen.menu_lines[index_line].parameter.digit.unit);
+        lcd.print(line);
+    }
+    else if(current_menu_screen.menu_lines[index_line].type == LIST_PARAM_LINE)
+    {
+        char line[21];
+        char format[6] = "%s %s";
+        if(start_edit_parameter && index_line == current_line_index)
+        {
+           format[2] = '>';
+        }
+        sprintf(line,format, current_menu_screen.menu_lines[index_line].string, 
+                             current_menu_screen.menu_lines[index_line].parameter.list.list_data[all_parameters[current_menu_screen.menu_lines[index_line].parameter.list.param_index]]);
+        lcd.print(line);       
+    }
 }
 
 /*
@@ -336,8 +555,18 @@ void show_cursor()
 {
     lcd.setCursor(0, last_cursor_index);
     lcd.print(F(" "));
+
+    if(!need_hide_cursor)
+    {
+      lcd.setCursor(0, cursor_index);
+      lcd.print(F(">"));
+    }
+}
+
+void hide_cursor() 
+{
     lcd.setCursor(0, cursor_index);
-    lcd.print(F(">"));
+    lcd.print(F(" "));
 }
 
 // ============================== процедура прорисовки меню и изменения значения параметров =======================================
@@ -348,10 +577,18 @@ void menu ()
   while (menu_enable == true)
   {
       read_buttons(buttonPin_Service);
-      //lcd.setCursor(0,0);
 
-      show_menu();
-      show_cursor();
+      if(need_clear_menu)
+      {
+        lcd.clear();
+        need_clear_menu = false;
+      }
+      if(need_reload_menu)
+      {
+        show_menu();
+        show_cursor();
+        need_reload_menu = false;
+      }
   }
 
   lcd.clear();
