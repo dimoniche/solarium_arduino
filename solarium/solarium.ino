@@ -43,19 +43,44 @@ byte current_line_index = 1;                        // текущая выбра
 byte cursor_index = 1;                              // положение курсора на экране
 byte last_cursor_index = 0;                         // предпоследнее положение курсора на экране
 byte show_window_first_line = 0;                    // индекс первой отображаемой строки меню на экране
-boolean need_reload_menu = true;
-boolean need_clear_menu = false;
-boolean need_hide_cursor = false;
-boolean start_edit_parameter = false;
+boolean need_reload_menu = true;                    // флаг перерисовки экрана
+boolean need_clear_menu = false;                    // флаг очистки экрана
+boolean need_hide_cursor = false;                   // флаг скытия курсора на экране
+boolean start_edit_parameter = false;               // флаг старта редактирования параметра
 
 // Переменные для работы с соляриями
+#define pause_before              0
+#define pause_after               1
+#define price                     2
+#define remote_start              3
+#define solarium_type             4
+#define work_regime               5
+#define signal_rele               6
+#define weight_impulse            7
+#define reset_device              8
+#define COUNT_BYTE_PARAMETER      9
+byte all_byte_parameters[COUNT_BYTE_PARAMETER];
 
-byte all_parameters[10] = {11,22,50,0};
+const byte all_byte_parameters_default[COUNT_BYTE_PARAMETER] = {
+  30,
+  3,
+  20,
+  0,
+  0,
+  0,
+  0,
+  10,
+  0
+};
 
-#define pause_before    0
-#define pause_after     1
-#define price           2
-#define remote_start    3
+#define long_starts_counter       0
+#define long_money_counter        1
+#define long_time_counter         2
+#define short_starts_counter      3
+#define short_money_counter       4
+#define short_time_counter        5
+#define COUNT_LONG_PARAMETER      6
+unsigned long all_long_parameters[COUNT_LONG_PARAMETER];
 
 // ============================== Описываем свой символ "Рубль" ========================================================================
 // Просто "рисуем" символ единицами. Единицы при выводе на экран окажутся закрашенными точками, нули - не закрашенными
@@ -145,6 +170,10 @@ void read_buttons(byte x)
 #define SETTING_MENU    1
 #define STATISTIC_MENU  2
 #define SOLARIUM_MENU   3
+#define BANK_MENU       4
+#define PASSWORD_MENU   5
+#define LONG_COUNTER_MENU   6
+#define SHORT_COUNTER_MENU  7
 
 enum type_menu_line {
   MENU_LINE = 0,
@@ -152,12 +181,13 @@ enum type_menu_line {
   DIGIT_PARAM_LINE,
   FIXED_LINE,
   LIST_PARAM_LINE,
+  TEXT_PARAM_LINE,
+  DIGIT_VIEW_LINE,
 };
 
 struct param_limit {
     byte min;
     byte max;
-    byte default_value;
 };
 
 struct parameter_menu {
@@ -173,13 +203,18 @@ struct parameter_digit {
 struct parameter_list {
   byte param_index;
   param_limit limit;
+  char list_data[4][13];
+};
 
-  char list_data[10][4];
+struct parameter_header {
+  byte param_index;
+  param_limit limit;
 };
 
 union param_data {
     parameter_list list;
     parameter_digit digit;
+    parameter_header header;
     parameter_menu menu;
 };
 
@@ -191,7 +226,7 @@ struct menu_line {
 };
 
 struct menu_screen {
-    menu_line menu_lines[5];
+    menu_line menu_lines[8];
     byte count_lines;
 };
 
@@ -239,18 +274,28 @@ const menu_screen menu_all[] PROGMEM = {
       {
         "Bank",
         MENU_LINE,
-        {2}
+        {BANK_MENU}
       },
       {
         "Password",
         MENU_LINE,
-        {2}
+        {PASSWORD_MENU}
       },
       {
         "Reset",
-        MENU_LINE,
-        {2}
-      }
+        LIST_PARAM_LINE,
+        {
+          reset_device,
+          {
+              0,
+              1,
+          },
+          {
+              "     ",
+              "start"
+          }
+        }
+      },
     },
     5
   },
@@ -265,12 +310,12 @@ const menu_screen menu_all[] PROGMEM = {
       {
         "Long counters",
         MENU_LINE,
-        {1}
+        {LONG_COUNTER_MENU}
       },
       {
         "Short counters",
         MENU_LINE,
-        {2}
+        {SHORT_COUNTER_MENU}
       }
     },
     3
@@ -291,7 +336,6 @@ const menu_screen menu_all[] PROGMEM = {
           {
               0,
               100,
-              30
           },
           "sec"
         }
@@ -304,7 +348,6 @@ const menu_screen menu_all[] PROGMEM = {
           {
               0,
               3,
-              3
           },
           "min"
         }
@@ -317,7 +360,6 @@ const menu_screen menu_all[] PROGMEM = {
           {
               0,
               100,
-              20
           },
           "rub"
         }
@@ -330,16 +372,202 @@ const menu_screen menu_all[] PROGMEM = {
           {
               0,
               1,
-              0
           },
           {
               "Off",
               "On "
           }
         }
-      } 
+      },
+      {
+        "Type",
+        LIST_PARAM_LINE,
+        {
+          solarium_type,
+          {
+              0,
+              3,
+          },
+          {
+              "Luxura      ",
+              "FireSun UV  ",
+              "FireSun UV+K",
+              "SunFlower   "
+          }
+        }
+      },
+      {
+        "Regime",
+        LIST_PARAM_LINE,
+        {
+          work_regime,
+          {
+              0,
+              1,
+          },
+          {
+              "Kollaten",
+              "UV      "
+          }
+        }
+      },
+      {
+        "Signal",
+        LIST_PARAM_LINE,
+        {
+          signal_rele,
+          {
+              0,
+              1,
+          },
+          {
+              "high",
+              "low "
+          }
+        }
+      },
     },
-    5
+    8
+  },
+  // Меню 4
+  {
+    {
+      {
+        "    BANK",
+        FIXED_LINE,
+        {0}
+      },
+      {
+        "Rub/imp",
+        DIGIT_PARAM_LINE,
+        {
+          weight_impulse,
+          {
+              0,
+              100,
+          },
+          ""
+        }
+      },
+    },
+    2
+  },
+  // Меню 5
+  {
+    {
+      {
+        "    PASSWORD",
+        FIXED_LINE,
+        {0}
+      },
+      {
+        "",
+        DIGIT_PARAM_LINE,
+        {
+          weight_impulse,
+          {
+              0,
+              100,
+          },
+          ""
+        }
+      },
+    },
+    2
+  },
+  // Меню 6
+  {
+    {
+      {
+        "LONG COUNTERS",
+        FIXED_LINE,
+        {0}
+      },
+      {
+        "Starts",
+        DIGIT_VIEW_LINE,
+        {
+          long_starts_counter,
+          {
+              0,
+              0,
+          },
+          ""
+        }
+      },
+      {
+        "Money",
+        DIGIT_VIEW_LINE,
+        {
+          long_money_counter,
+          {
+              0,
+              0,
+          },
+          "rub"
+        }
+      },
+      {
+        "Time",
+        DIGIT_VIEW_LINE,
+        {
+          long_time_counter,
+          {
+              0,
+              0,
+          },
+          "sec"
+        }
+      },
+    },
+    4
+  },
+  // Меню 7
+  {
+    {
+      {
+        "SHORT COUNTERS",
+        FIXED_LINE,
+        {0}
+      },
+      {
+        "Starts",
+        DIGIT_VIEW_LINE,
+        {
+          short_starts_counter,
+          {
+              0,
+              0,
+          },
+          ""
+        }
+      },
+      {
+        "Money",
+        DIGIT_VIEW_LINE,
+        {
+          short_money_counter,
+          {
+              0,
+              0,
+          },
+          "rub"
+        }
+      },
+      {
+        "Time",
+        DIGIT_VIEW_LINE,
+        {
+          short_time_counter,
+          {
+              0,
+              0,
+          },
+          "sec"
+        }
+      },
+    },
+    4
   },
 };
 
@@ -360,15 +588,46 @@ void find_first_line_menu()
 */
 void load_parameter()
 {
-
+    for(int i = 0; i < COUNT_BYTE_PARAMETER; i++ )
+    {
+        all_byte_parameters[i] = EEPROM.readByte(i);
+    }
+    for(int i = COUNT_BYTE_PARAMETER, j = 0; j < COUNT_LONG_PARAMETER; i += 4, j++ )
+    {
+        all_long_parameters[j] = EEPROM.readLong(i);
+    }
 }
 
 /*
   Сохранение параметра в память
 */
-void save_parameter(byte index_param)
+void save_byte_parameter(byte index_param)
 {
+    EEPROM.updateByte(index_param, all_byte_parameters[index_param]);
+}
 
+/*
+  Сохранение параметра в память
+*/
+void save_long_parameter(byte index_param)
+{
+    EEPROM.updateLong(COUNT_BYTE_PARAMETER + index_param * 4, all_long_parameters[index_param]);
+}
+
+/*
+  Сброс параметров в памяти
+*/
+void reset_parameter()
+{
+    for(int i = 0; i < COUNT_BYTE_PARAMETER; i++)
+    {
+        all_byte_parameters[i] = all_byte_parameters_default[i];
+        EEPROM.updateByte(i, all_byte_parameters_default[i]);
+    }
+
+    all_long_parameters[short_starts_counter] = 0;
+    all_long_parameters[short_money_counter] = 0;
+    all_long_parameters[short_time_counter] = 0;
 }
 
 /*
@@ -395,11 +654,11 @@ void isButtonHold()
           need_hide_cursor = false;
           if(current_menu_screen.menu_lines[current_line_index].type == DIGIT_PARAM_LINE)
           {
-              save_parameter(current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index);
+              save_byte_parameter(current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index);
           }
           else if(current_menu_screen.menu_lines[current_line_index].type == LIST_PARAM_LINE)
           {
-              save_parameter(current_menu_screen.menu_lines[current_line_index].parameter.list.param_index);
+              save_byte_parameter(current_menu_screen.menu_lines[current_line_index].parameter.list.param_index);
           }
       }
       else
@@ -434,16 +693,16 @@ void isButtonSingle()
   {
       if(current_menu_screen.menu_lines[current_line_index].type == DIGIT_PARAM_LINE)
       {
-          if(all_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index]++ >= current_menu_screen.menu_lines[current_line_index].parameter.digit.limit.max)
+          if(all_byte_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index]++ >= current_menu_screen.menu_lines[current_line_index].parameter.digit.limit.max)
           {
-              all_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index] = current_menu_screen.menu_lines[current_line_index].parameter.digit.limit.min;
+              all_byte_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index] = current_menu_screen.menu_lines[current_line_index].parameter.digit.limit.min;
           }
       }
       else if(current_menu_screen.menu_lines[current_line_index].type == LIST_PARAM_LINE)
       {
-          if(all_parameters[current_menu_screen.menu_lines[current_line_index].parameter.list.param_index]++ >= current_menu_screen.menu_lines[current_line_index].parameter.list.limit.max)
+          if(all_byte_parameters[current_menu_screen.menu_lines[current_line_index].parameter.list.param_index]++ >= current_menu_screen.menu_lines[current_line_index].parameter.list.limit.max)
           {
-              all_parameters[current_menu_screen.menu_lines[current_line_index].parameter.list.param_index] = current_menu_screen.menu_lines[current_line_index].parameter.list.limit.min;
+              all_byte_parameters[current_menu_screen.menu_lines[current_line_index].parameter.list.param_index] = current_menu_screen.menu_lines[current_line_index].parameter.list.limit.min;
           }
       }
   }
@@ -515,7 +774,7 @@ void show_line(byte index_line)
            format[2] = '>';
         }
         sprintf(line,format, current_menu_screen.menu_lines[index_line].string, 
-                             all_parameters[current_menu_screen.menu_lines[index_line].parameter.digit.param_index], 
+                             all_byte_parameters[current_menu_screen.menu_lines[index_line].parameter.digit.param_index], 
                              current_menu_screen.menu_lines[index_line].parameter.digit.unit);
         lcd.print(line);
     }
@@ -528,8 +787,16 @@ void show_line(byte index_line)
            format[2] = '>';
         }
         sprintf(line,format, current_menu_screen.menu_lines[index_line].string, 
-                             current_menu_screen.menu_lines[index_line].parameter.list.list_data[all_parameters[current_menu_screen.menu_lines[index_line].parameter.list.param_index]]);
+                             current_menu_screen.menu_lines[index_line].parameter.list.list_data[all_byte_parameters[current_menu_screen.menu_lines[index_line].parameter.list.param_index]]);
         lcd.print(line);       
+    }
+    else if(current_menu_screen.menu_lines[index_line].type == DIGIT_VIEW_LINE)
+    {
+        char line[21];
+        sprintf(line,"%s %ld %s", current_menu_screen.menu_lines[index_line].string, 
+                                 all_long_parameters[current_menu_screen.menu_lines[index_line].parameter.digit.param_index], 
+                                 current_menu_screen.menu_lines[index_line].parameter.digit.unit);
+        lcd.print(line);        
     }
 }
 
@@ -570,7 +837,7 @@ void hide_cursor()
 }
 
 // ============================== процедура прорисовки меню и изменения значения параметров =======================================
-void menu ()  
+void menu()
 {
   lcd.clear();
   digitalWrite(LEDPin, HIGH);
@@ -588,6 +855,11 @@ void menu ()
         show_menu();
         show_cursor();
         need_reload_menu = false;
+      }
+      if(all_byte_parameters[reset_device])
+      {
+          reset_parameter();
+          all_byte_parameters[reset_device] = 0;
       }
   }
 
