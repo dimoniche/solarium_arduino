@@ -11,10 +11,10 @@ const byte inhibitPin = 4;                          // +Inhibit (зеленый)
 const byte buttonPin_Start = 15;                    // номер входа, подключенный к кнопке "Старт", А0
 const byte buttonPin_Service = 13;                  // номер входа, подключенный к кнопке "Сервис", А1
 const byte LEDPin = 14;                             // номер выхода светодиода кнопки Старт, DB13
-//const byte RelayPin = 17;                           // номер выхода, подключенный к реле, А3
+//const byte RelayPin = 17;                         // номер выхода, подключенный к реле, А3
 const byte Device_SerNum = 1;                       // серийный номер устройства
-const PROGMEM char Device_Ver[] = "0.0";                    // версия ПО устройства
-const PROGMEM char Device_Date[] = "09/09/24";              // дата производства устройства
+const PROGMEM char Device_Ver[] = "0.0";            // версия ПО устройства
+const PROGMEM char Device_Date[] = "09/09/24";      // дата производства устройства
 const unsigned long block = 500000;                 // блокировка устройства при превышении этой суммы денег
 
 //======Переменные обработки клавиш=================
@@ -29,6 +29,20 @@ unsigned long ledStartTime = 0;                     // переменная-фл
 const int bounceTime = 10;                          // задержка для подавления дребезга
 const int holdTime = 1000;                          // время, в течение которого нажатие можно считать удержанием кнопки
 const int doubleTime = 500;                         // время, в течение которого нажатия можно считать двойным
+
+// Переменные приема денег
+boolean bill_enable = true;                         // изначально купюроприемник принимает деньги
+
+// Данные сеанса
+int minute = 0;
+int remain = 0;
+int second = 0;
+
+volatile unsigned int impulseCounter = 0;           // счетчик импульсов от купюроприемника (1 = 10 руб.). volatile для видимости переменной и в функции обработки прерывания 
+byte debounceDelay = 10;                            // для устранения дребезга устанавливаем мин. длительность принимаемого импульса
+int trueState = LOW;
+int lastState = LOW;
+unsigned long lastStateChangeTime = 0;              // положительные целые числа (4 байта)
 
 //======Переменные меню=============================
 #define MENU_INTER_COUNT      5                     // количество возможных вложений меню
@@ -79,8 +93,13 @@ const byte all_byte_parameters_default[COUNT_BYTE_PARAMETER] = {
 #define short_starts_counter      3
 #define short_money_counter       4
 #define short_time_counter        5
-#define COUNT_LONG_PARAMETER      6
+#define impulse_counter           6
+#define COUNT_LONG_PARAMETER      7
 unsigned long all_long_parameters[COUNT_LONG_PARAMETER];
+
+#define time_seance               0
+#define COUNT_TEXT_PARAMETER      1
+char text_parameters[COUNT_TEXT_PARAMETER][6];
 
 // ============================== Описываем свой символ "Рубль" ========================================================================
 // Просто "рисуем" символ единицами. Единицы при выводе на экран окажутся закрашенными точками, нули - не закрашенными
@@ -96,25 +115,6 @@ const PROGMEM byte rubl[8] = {
 };
 
 LiquidCrystal_I2C lcd(0x27, SIZE_SCREEN_LINE, SIZE_SCREEN);                 // устанавливаем адрес 0x27, и дисплей 16 символов 2 строки
-
-void setup() {
-  Serial.begin(115200);
-
-  lcd.init();                                       // инициализация LCD
-  lcd.backlight();                                  // включаем подсветку
-  lcd.createChar(0, rubl);                          // создаем символ и записываем его в память LCD по 0 адресу
-
-  pinMode(inhibitPin, OUTPUT);                      // устанавливает режим работы - выход
-  pinMode(moneyPin, INPUT_PULLUP);                  // устанавливает режим работы - вход, подтягиваем к +5В через встроенный подтягивающий резистор (на всякий случай)
-  pinMode(LEDPin, OUTPUT);                          // инициализируем пин, подключенный к светодиоду, как выход
-  pinMode(buttonPin_Service, INPUT_PULLUP);                // инициализируем пин, подключенный к кнопке, как вход
-  pinMode(buttonPin_Start, INPUT_PULLUP);                  // инициализируем пин, подключенный к кнопке, как вход
-
-  digitalWrite(LEDPin,LOW);                        // изначально светодиод погашен
-  digitalWrite(inhibitPin, LOW);                    // изначально разрешаем прием купюр
-
-  load_parameter();
-}
 
 void read_buttons(byte x)
 {
@@ -211,9 +211,16 @@ struct parameter_header {
   param_limit limit;
 };
 
+struct parameter_text {
+  byte param_index;
+  param_limit limit;
+  char unit[5];
+};
+
 union param_data {
     parameter_list list;
     parameter_digit digit;
+    parameter_text text;
     parameter_header header;
     parameter_menu menu;
 };
@@ -234,9 +241,64 @@ struct menu_screen {
 menu_screen current_menu_screen;
 
 /*
-  описание меню
+  Описание основного меню
 */
-const menu_screen menu_all[] PROGMEM = {
+const menu_screen menu_main[] PROGMEM = {
+  {
+    {
+      {
+        "",
+        FIXED_LINE,
+        {0}
+      },
+      {
+        "     BHECEHO",
+        FIXED_LINE,
+        {0}
+      },
+      {
+        "    ",
+        DIGIT_VIEW_LINE,
+        {
+          impulse_counter,
+          {
+              0,
+              0,
+          },
+          "rub"
+        }
+      },
+    },
+    3
+  },
+  {
+    {
+      {
+        "",
+        FIXED_LINE,
+        {0}
+      },
+      {
+        "   ",
+        TEXT_PARAM_LINE,
+        {
+          time_seance,
+          {
+              0,
+              0,
+          },
+          "MUH"
+        },
+      },
+    },
+    2
+  },
+};
+
+/*
+  описание настроечного меню
+*/
+const menu_screen menu_settings[] PROGMEM = {
   // Меню 0
   {
     {
@@ -626,8 +688,16 @@ void reset_parameter()
     }
 
     all_long_parameters[short_starts_counter] = 0;
+    save_long_parameter(short_starts_counter);
+
     all_long_parameters[short_money_counter] = 0;
+    save_long_parameter(short_money_counter);
+
     all_long_parameters[short_time_counter] = 0;
+    save_long_parameter(short_time_counter);
+    
+    all_long_parameters[impulse_counter] = 0;
+    save_long_parameter(impulse_counter);
 }
 
 /*
@@ -641,7 +711,7 @@ void isButtonHold()
   {
       menu_index = MAIN_MENU;
 
-      memcpy_P( &current_menu_screen, &menu_all[menu_index], sizeof(menu_screen));
+      memcpy_P( &current_menu_screen, &menu_settings[menu_index], sizeof(menu_screen));
       find_first_line_menu();
 
       menu_enable = true;
@@ -672,7 +742,7 @@ void isButtonHold()
               menu_inter--;
               menu_index = last_menu_index[menu_inter];
 
-              memcpy_P( &current_menu_screen, &menu_all[menu_index], sizeof(menu_screen));
+              memcpy_P( &current_menu_screen, &menu_settings[menu_index], sizeof(menu_screen));
               find_first_line_menu();
 
               digitalWrite(LEDPin, HIGH);
@@ -739,7 +809,7 @@ void isButtonDouble()
         menu_inter++;
         menu_index = current_menu_screen.menu_lines[current_line_index].parameter.menu.next_menu_index;
 
-        memcpy_P( &current_menu_screen, &menu_all[menu_index], sizeof(menu_screen));
+        memcpy_P( &current_menu_screen, &menu_settings[menu_index], sizeof(menu_screen));
         find_first_line_menu();
         lcd.clear();
     }
@@ -798,6 +868,14 @@ void show_line(byte index_line)
                                  current_menu_screen.menu_lines[index_line].parameter.digit.unit);
         lcd.print(line);        
     }
+    else if(current_menu_screen.menu_lines[index_line].type == TEXT_PARAM_LINE)
+    {
+        char line[21];
+        sprintf(line,"%s %s %s", current_menu_screen.menu_lines[index_line].string, 
+                                  text_parameters[current_menu_screen.menu_lines[index_line].parameter.text.param_index], 
+                                  current_menu_screen.menu_lines[index_line].parameter.text.unit);
+        lcd.print(line); 
+   }
 }
 
 /*
@@ -836,11 +914,70 @@ void hide_cursor()
     lcd.print(F(" "));
 }
 
+/* 
+ * Функция подсчета импульсов от купюроприемника
+ * Когда импульсов нет, записываются значения reading = trueState = lastState = HIGH, при поступлении импульса reading = LOW,
+ * фиксируется время появления импульса в lastStateChangeTime. Если длительность импульса > debounceDelay (время дребезга),
+ * значит это полезный импульс, значения изменяются reading = trueState = lastState = LOW
+ */
+void read_money_impulse ()
+{
+  int reading = digitalRead(moneyPin);
+  if (reading != lastState) 
+  {
+    lastStateChangeTime = millis();
+  }
+  if ((millis() - lastStateChangeTime) > debounceDelay)
+  {
+    if (reading != trueState)
+    {
+      trueState = reading;
+      if (trueState == LOW) 
+      {
+          all_long_parameters[impulse_counter] += all_byte_parameters[weight_impulse];
+      }
+    }
+  }
+  lastState = reading;   
+} 
+
+/*
+  Прием денег
+*/
+void get_money ()
+{
+    read_money_impulse ();
+
+    minute = all_long_parameters[impulse_counter] / all_byte_parameters[price];
+    remain = all_long_parameters[impulse_counter] % all_byte_parameters[price];
+    second = remain * 60 / all_byte_parameters[price];
+
+    sprintf(text_parameters[time_seance],"%02d:%02d",minute, second);
+
+    if (all_long_parameters[impulse_counter] >= all_byte_parameters[price])
+    {
+        // достаточно денег для оказания услуги
+        memcpy_P( &current_menu_screen, &menu_main[1], sizeof(menu_screen));
+
+        digitalWrite(LEDPin, HIGH);
+
+        if (digitalRead(buttonPin_Start) == HIGH)
+        {
+          digitalWrite(inhibitPin, HIGH);               // выставляем запрет приема монет 
+          digitalWrite(LEDPin, LOW);                    // гасим светодиод  
+
+        }
+    }
+}
+
 // ============================== процедура прорисовки меню и изменения значения параметров =======================================
 void menu()
 {
   lcd.clear();
   digitalWrite(LEDPin, HIGH);
+  show_cursor();
+  need_hide_cursor = false;
+
   while (menu_enable == true)
   {
       read_buttons(buttonPin_Service);
@@ -867,18 +1004,48 @@ void menu()
   digitalWrite(LEDPin, LOW);
 }
 
+void setup() {
+  Serial.begin(115200);
+
+  lcd.init();                                       // инициализация LCD
+  lcd.backlight();                                  // включаем подсветку
+  lcd.createChar(0, rubl);                          // создаем символ и записываем его в память LCD по 0 адресу
+
+  pinMode(inhibitPin, OUTPUT);                      // устанавливает режим работы - выход
+  pinMode(moneyPin, INPUT_PULLUP);                  // устанавливает режим работы - вход, подтягиваем к +5В через встроенный подтягивающий резистор (на всякий случай)
+  pinMode(LEDPin, OUTPUT);                          // инициализируем пин, подключенный к светодиоду, как выход
+  pinMode(buttonPin_Service, INPUT_PULLUP);         // инициализируем пин, подключенный к кнопке, как вход
+  pinMode(buttonPin_Start, INPUT_PULLUP);           // инициализируем пин, подключенный к кнопке, как вход
+
+  digitalWrite(LEDPin,LOW);                         // изначально светодиод погашен
+  digitalWrite(inhibitPin, LOW);                    // изначально разрешаем прием купюр
+
+  load_parameter();
+  memcpy_P( &current_menu_screen, &menu_main[0], sizeof(menu_screen));
+}
+
 void loop() {
   read_buttons(buttonPin_Service);
+  hide_cursor();
+  need_hide_cursor = true;
+
   if (menu_enable == true)                          // если флаг menu_enable = ИСТИНА, то входим в меню 
   {
-    menu();  
+      menu();
+      need_reload_menu = true;
+      memcpy_P( &current_menu_screen, &menu_main[0], sizeof(menu_screen));
   }
   else
-  { 
-    /*if (bill_enable == true && menu_enable == false)  
+  {
+    if (bill_enable == true && menu_enable == false)  
     {
-      get_money ();                                 // принимаем деньги
-    }*/
+        get_money();
+    }
+    if(need_reload_menu)
+    {
+      show_menu();
+      need_reload_menu = false;
+    }
   }
   /*if (bill_enable == false && menu_enable == false)
   {
