@@ -44,6 +44,9 @@ int trueState = LOW;
 int lastState = LOW;
 unsigned long lastStateChangeTime = 0;              // положительные целые числа (4 байта)
 
+boolean counter = false;                            // счетчик для полусекунд
+unsigned long previousMillis = 0;                   // переменная для хранения значений таймера
+
 //======Переменные меню=============================
 #define MENU_INTER_COUNT      5                     // количество возможных вложений меню
 #define SIZE_SCREEN           4                     // количество строк на экране
@@ -98,7 +101,9 @@ const byte all_byte_parameters_default[COUNT_BYTE_PARAMETER] = {
 unsigned long all_long_parameters[COUNT_LONG_PARAMETER];
 
 #define time_seance               0
-#define COUNT_TEXT_PARAMETER      1
+#define time_delay                1
+#define time_delay                1
+#define COUNT_TEXT_PARAMETER      2
 char text_parameters[COUNT_TEXT_PARAMETER][6];
 
 // ============================== Описываем свой символ "Рубль" ========================================================================
@@ -244,6 +249,7 @@ menu_screen current_menu_screen;
   Описание основного меню
 */
 const menu_screen menu_main[] PROGMEM = {
+  // Меню внесения денег и отображения времени сеанкса
   {
     {
       {
@@ -253,11 +259,6 @@ const menu_screen menu_main[] PROGMEM = {
       },
       {
         "     BHECEHO",
-        FIXED_LINE,
-        {0}
-      },
-      {
-        "    ",
         DIGIT_VIEW_LINE,
         {
           impulse_counter,
@@ -268,9 +269,22 @@ const menu_screen menu_main[] PROGMEM = {
           "rub"
         }
       },
+      {
+        "",
+        DIGIT_VIEW_LINE,
+        {
+          time_seance,
+          {
+              0,
+              0,
+          },
+          ""
+        }
+      },
     },
     3
   },
+  // Время задержки до
   {
     {
       {
@@ -282,13 +296,57 @@ const menu_screen menu_main[] PROGMEM = {
         "   ",
         TEXT_PARAM_LINE,
         {
+          time_delay,
+          {
+              0,
+              0,
+          },
+          "CEK"
+        },
+      },
+    },
+    2
+  },
+  // Меню ведения сеанса
+  {
+    {
+      {
+        "",
+        FIXED_LINE,
+        {0}
+      },
+      {
+        "     CEAHC",
+        FIXED_LINE,
+        {0}
+      },
+      {
+        "    ",
+        DIGIT_VIEW_LINE,
+        {
           time_seance,
           {
               0,
               0,
           },
           "MUH"
-        },
+        }
+      },
+    },
+    3
+  },
+  // Меню окончания сеанса
+  {
+    {
+      {
+        "",
+        FIXED_LINE,
+        {0}
+      },
+      {
+        "     KOHEU",
+        FIXED_LINE,
+        {0}
       },
     },
     2
@@ -952,20 +1010,24 @@ void get_money ()
     remain = all_long_parameters[impulse_counter] % all_byte_parameters[price];
     second = remain * 60 / all_byte_parameters[price];
 
-    sprintf(text_parameters[time_seance],"%02d:%02d",minute, second);
-
     if (all_long_parameters[impulse_counter] >= all_byte_parameters[price])
     {
         // достаточно денег для оказания услуги
-        memcpy_P( &current_menu_screen, &menu_main[1], sizeof(menu_screen));
+        sprintf(text_parameters[time_seance]," CEAHC %02d:%02d MUH", minute, second);
 
-        digitalWrite(LEDPin, HIGH);
+        digitalWrite(LEDPin, HIGH);                     // зажигаем светодиод 
+
 
         if (digitalRead(buttonPin_Start) == HIGH)
         {
           digitalWrite(inhibitPin, HIGH);               // выставляем запрет приема монет 
           digitalWrite(LEDPin, LOW);                    // гасим светодиод  
+          lcd.clear();
 
+          sprintf(text_parameters[time_seance],"%2d", all_byte_parameters[pause_before]);
+          delay(all_byte_parameters[pause_before]);
+
+          bill_enable =! bill_enable;                   // устанавливаем флаг: не принимаем деньги
         }
     }
 }
@@ -1004,6 +1066,37 @@ void menu()
   digitalWrite(LEDPin, LOW);
 }
 
+/*
+    Событие полусекунды
+*/
+void one_half_second()
+{
+
+}
+
+/*
+    Событие секунды
+*/
+void second_event()
+{
+
+}
+
+void countdown_timer() 
+{
+    if (millis() - previousMillis > 500)
+    {
+        one_half_second();
+
+        previousMillis = millis();
+        counter = !counter; 
+        if (counter == false)
+        {
+            second_event();
+        }
+    }
+}
+
 void setup() {
   Serial.begin(115200);
 
@@ -1024,7 +1117,8 @@ void setup() {
   memcpy_P( &current_menu_screen, &menu_main[0], sizeof(menu_screen));
 }
 
-void loop() {
+void loop() 
+{
   read_buttons(buttonPin_Service);
   hide_cursor();
   need_hide_cursor = true;
@@ -1047,8 +1141,8 @@ void loop() {
       need_reload_menu = false;
     }
   }
-  /*if (bill_enable == false && menu_enable == false)
+  if (bill_enable == false && menu_enable == false)
   {
-    countdown_timer(sek, minu);                     // запускаем таймер обратного отсчета
-  }*/
+    countdown_timer();                              // запускаем таймер обратного отсчета
+  }
 }
