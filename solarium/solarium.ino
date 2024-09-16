@@ -11,7 +11,12 @@ const byte inhibitPin = 4;                          // +Inhibit (зеленый)
 const byte buttonPin_Start = 15;                    // номер входа, подключенный к кнопке "Старт", А0
 const byte buttonPin_Service = 13;                  // номер входа, подключенный к кнопке "Сервис", А1
 const byte LEDPin = 14;                             // номер выхода светодиода кнопки Старт, DB13
-//const byte RelayPin = 17;                         // номер выхода, подключенный к реле, А3
+
+// ноги управления соляриями
+const byte lamp_start_pin = 5;          // Запуск солярия Luxura. Включение ламп солярия FireSun, SunFlower
+const byte vent_pin = 6;                // Включение вентиляторов солярия FireSun, SunFlower
+const byte start_solarium = 7;          // Удаленный старт от солярия
+
 const byte Device_SerNum = 1;                       // серийный номер устройства
 const PROGMEM char Device_Ver[] = "0.0";            // версия ПО устройства
 const PROGMEM char Device_Date[] = "09/09/24";      // дата производства устройства
@@ -96,15 +101,14 @@ const byte all_byte_parameters_default[COUNT_BYTE_PARAMETER] = {
 #define short_starts_counter      3
 #define short_money_counter       4
 #define short_time_counter        5
-#define impulse_counter           6
+#define money_counter             6
 #define COUNT_LONG_PARAMETER      7
 unsigned long all_long_parameters[COUNT_LONG_PARAMETER];
 
 #define time_seance               0
 #define time_delay                1
-#define time_delay                1
 #define COUNT_TEXT_PARAMETER      2
-char text_parameters[COUNT_TEXT_PARAMETER][6];
+char text_parameters[COUNT_TEXT_PARAMETER][20];
 
 // ============================== Описываем свой символ "Рубль" ========================================================================
 // Просто "рисуем" символ единицами. Единицы при выводе на экран окажутся закрашенными точками, нули - не закрашенными
@@ -258,10 +262,10 @@ const menu_screen menu_main[] PROGMEM = {
         {0}
       },
       {
-        "     BHECEHO",
+        "  BHECEHO",
         DIGIT_VIEW_LINE,
         {
-          impulse_counter,
+          money_counter,
           {
               0,
               0,
@@ -271,7 +275,7 @@ const menu_screen menu_main[] PROGMEM = {
       },
       {
         "",
-        DIGIT_VIEW_LINE,
+        TEXT_PARAM_LINE,
         {
           time_seance,
           {
@@ -316,13 +320,13 @@ const menu_screen menu_main[] PROGMEM = {
         {0}
       },
       {
-        "     CEAHC",
+        "      CEAHC",
         FIXED_LINE,
         {0}
       },
       {
-        "    ",
-        DIGIT_VIEW_LINE,
+        "  ",
+        TEXT_PARAM_LINE,
         {
           time_seance,
           {
@@ -754,8 +758,8 @@ void reset_parameter()
     all_long_parameters[short_time_counter] = 0;
     save_long_parameter(short_time_counter);
     
-    all_long_parameters[impulse_counter] = 0;
-    save_long_parameter(impulse_counter);
+    all_long_parameters[money_counter] = 0;
+    save_long_parameter(money_counter);
 }
 
 /*
@@ -978,9 +982,10 @@ void hide_cursor()
  * фиксируется время появления импульса в lastStateChangeTime. Если длительность импульса > debounceDelay (время дребезга),
  * значит это полезный импульс, значения изменяются reading = trueState = lastState = LOW
  */
-void read_money_impulse ()
+bool read_money_impulse ()
 {
   int reading = digitalRead(moneyPin);
+  bool impulse = false;
   if (reading != lastState) 
   {
     lastStateChangeTime = millis();
@@ -992,42 +997,74 @@ void read_money_impulse ()
       trueState = reading;
       if (trueState == LOW) 
       {
-          all_long_parameters[impulse_counter] += all_byte_parameters[weight_impulse];
+          all_long_parameters[money_counter] += all_byte_parameters[weight_impulse];
+          impulse = true;
       }
     }
   }
-  lastState = reading;   
-} 
+  lastState = reading;
+
+  return impulse;
+}
 
 /*
   Прием денег
 */
 void get_money ()
 {
-    read_money_impulse ();
+    bool impulse = read_money_impulse();
 
-    minute = all_long_parameters[impulse_counter] / all_byte_parameters[price];
-    remain = all_long_parameters[impulse_counter] % all_byte_parameters[price];
+    minute = all_long_parameters[money_counter] / all_byte_parameters[price];
+    remain = all_long_parameters[money_counter] % all_byte_parameters[price];
     second = remain * 60 / all_byte_parameters[price];
 
-    if (all_long_parameters[impulse_counter] >= all_byte_parameters[price])
+    if(impulse) need_reload_menu = true;
+  
+    if (all_long_parameters[money_counter] >= all_byte_parameters[price])
     {
         // достаточно денег для оказания услуги
         sprintf(text_parameters[time_seance]," CEAHC %02d:%02d MUH", minute, second);
 
         digitalWrite(LEDPin, HIGH);                     // зажигаем светодиод 
 
-
-        if (digitalRead(buttonPin_Start) == HIGH)
+        if (digitalRead(buttonPin_Start) == LOW)
         {
           digitalWrite(inhibitPin, HIGH);               // выставляем запрет приема монет 
-          digitalWrite(LEDPin, LOW);                    // гасим светодиод  
-          lcd.clear();
+          digitalWrite(LEDPin, LOW);                    // гасим светодиод
 
-          sprintf(text_parameters[time_seance],"%2d", all_byte_parameters[pause_before]);
-          delay(all_byte_parameters[pause_before]);
+          // сохраняем статистику
+          {
+            all_long_parameters[long_starts_counter]++;
+            save_long_parameter(long_starts_counter);
+            all_long_parameters[short_starts_counter]++;
+            save_long_parameter(short_starts_counter);
+            all_long_parameters[long_time_counter] += minute * 60 + second;
+            save_long_parameter(long_time_counter);
+            all_long_parameters[short_time_counter] += minute * 60 + second;
+            save_long_parameter(short_time_counter);
+            all_long_parameters[long_money_counter] += all_long_parameters[money_counter];
+            save_long_parameter(long_money_counter);
+            all_long_parameters[short_money_counter] += all_long_parameters[money_counter];
+            save_long_parameter(short_money_counter);
+            all_long_parameters[money_counter] = 0;
+            save_long_parameter(money_counter);
+          }
+
+          // задержка до запуска
+          memcpy_P( &current_menu_screen, &menu_main[1], sizeof(menu_screen));
+          sprintf(text_parameters[time_delay],"%2d", all_byte_parameters[pause_before]);
+          lcd.clear();
+          show_menu();
+          delay(all_byte_parameters[pause_before] * 1000);
+
+          memcpy_P( &current_menu_screen, &menu_main[2], sizeof(menu_screen));
+          menu_index = 2;
+          sprintf(text_parameters[time_seance]," %02d:%02d", minute, second);
+          need_clear_menu = true;
+          need_reload_menu = true;
 
           bill_enable =! bill_enable;                   // устанавливаем флаг: не принимаем деньги
+          // Запускаем работу солярия
         }
     }
 }
@@ -1079,7 +1116,35 @@ void one_half_second()
 */
 void second_event()
 {
+    unsigned long time_remain = minute * 60 + second - 1;
 
+    minute = time_remain / 60;
+    second = time_remain % 60;
+
+    sprintf(text_parameters[time_seance]," %02d:%02d", minute, second);
+    need_reload_menu = true;
+
+    if(menu_index == 3 && time_remain == 0)
+    {
+        memcpy_P( &current_menu_screen, &menu_main[0], sizeof(menu_screen));
+        sprintf(text_parameters[time_seance],"");
+        menu_index = 0;
+
+        need_clear_menu = true;
+        need_reload_menu = true;
+
+        bill_enable =! bill_enable;
+    }
+    if(menu_index == 2 && time_remain == 0)
+    {
+        memcpy_P( &current_menu_screen, &menu_main[3], sizeof(menu_screen));
+        menu_index = 3;
+
+        need_clear_menu = true;
+        need_reload_menu = true;
+
+        second = 10;
+    }
 }
 
 void countdown_timer() 
@@ -1097,7 +1162,8 @@ void countdown_timer()
     }
 }
 
-void setup() {
+void setup()
+{
   Serial.begin(115200);
 
   lcd.init();                                       // инициализация LCD
@@ -1115,6 +1181,8 @@ void setup() {
 
   load_parameter();
   memcpy_P( &current_menu_screen, &menu_main[0], sizeof(menu_screen));
+  sprintf(text_parameters[time_seance],"");
+  menu_index = 0;
 }
 
 void loop() 
@@ -1134,6 +1202,11 @@ void loop()
     if (bill_enable == true && menu_enable == false)  
     {
         get_money();
+    }
+    if(need_clear_menu)
+    {
+      lcd.clear();
+      need_clear_menu = false;
     }
     if(need_reload_menu)
     {
