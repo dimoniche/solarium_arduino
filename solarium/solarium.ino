@@ -70,17 +70,27 @@ boolean need_clear_menu = false;                    // флаг очистки �
 boolean need_hide_cursor = false;                   // флаг скытия курсора на экране
 boolean start_edit_parameter = false;               // флаг старта редактирования параметра
 
+bool enable_reset = false;                          // разрешение сброса настроек
+
 // Переменные для работы с соляриями
 #define pause_before              0
 #define pause_after               1
 #define price                     2
 #define remote_start              3
+
+#define LUXURA_SOL                0
+#define FIRESUN_UV_SOL            1
+#define FIRESUN_UV_K_SOL          2
+#define SUNFLOWER_SOL             3
+
 #define solarium_type             4
 #define work_regime               5
 #define signal_rele               6
 #define weight_impulse            7
 #define reset_device              8
-#define COUNT_BYTE_PARAMETER      9
+#define reset_counters            9
+#define password                  10
+#define COUNT_BYTE_PARAMETER      11
 byte all_byte_parameters[COUNT_BYTE_PARAMETER];
 
 const byte all_byte_parameters_default[COUNT_BYTE_PARAMETER] = {
@@ -92,7 +102,9 @@ const byte all_byte_parameters_default[COUNT_BYTE_PARAMETER] = {
   0,
   0,
   10,
-  0
+  0,
+  0,
+  0,
 };
 
 #define long_starts_counter       0
@@ -112,7 +124,7 @@ char text_parameters[COUNT_TEXT_PARAMETER][20];
 
 // ============================== Описываем свой символ "Рубль" ========================================================================
 // Просто "рисуем" символ единицами. Единицы при выводе на экран окажутся закрашенными точками, нули - не закрашенными
-const PROGMEM byte rubl[8] = {
+const byte rubl[8] = {
   0b00000,
   0b01110,
   0b01001,
@@ -270,7 +282,7 @@ const menu_screen menu_main[] PROGMEM = {
               0,
               0,
           },
-          "rub"
+          0
         }
       },
       {
@@ -282,7 +294,7 @@ const menu_screen menu_main[] PROGMEM = {
               0,
               0,
           },
-          ""
+          " "
         }
       },
     },
@@ -334,6 +346,34 @@ const menu_screen menu_main[] PROGMEM = {
               0,
           },
           "MUH"
+        }
+      },
+    },
+    3
+  },
+  // Меню паузы после сеанса
+  {
+    {
+      {
+        "",
+        FIXED_LINE,
+        {0}
+      },
+      {
+        "     PAUSE",
+        FIXED_LINE,
+        {0}
+      },
+      {
+        "",
+        TEXT_PARAM_LINE,
+        {
+          time_seance,
+          {
+              0,
+              0,
+          },
+          " "
         }
       },
     },
@@ -485,7 +525,7 @@ const menu_screen menu_settings[] PROGMEM = {
               0,
               100,
           },
-          "rub"
+          0
         }
       },
       {
@@ -570,7 +610,7 @@ const menu_screen menu_settings[] PROGMEM = {
               0,
               100,
           },
-          ""
+          " "
         }
       },
     },
@@ -585,15 +625,15 @@ const menu_screen menu_settings[] PROGMEM = {
         {0}
       },
       {
-        "",
+        "Pasword",
         DIGIT_PARAM_LINE,
         {
-          weight_impulse,
+          password,
           {
               0,
-              100,
+              255,
           },
-          ""
+          " "
         }
       },
     },
@@ -616,7 +656,7 @@ const menu_screen menu_settings[] PROGMEM = {
               0,
               0,
           },
-          ""
+          " "
         }
       },
       {
@@ -628,7 +668,7 @@ const menu_screen menu_settings[] PROGMEM = {
               0,
               0,
           },
-          "rub"
+          0
         }
       },
       {
@@ -663,7 +703,7 @@ const menu_screen menu_settings[] PROGMEM = {
               0,
               0,
           },
-          ""
+          " "
         }
       },
       {
@@ -675,7 +715,7 @@ const menu_screen menu_settings[] PROGMEM = {
               0,
               0,
           },
-          "rub"
+          0
         }
       },
       {
@@ -758,8 +798,29 @@ void reset_parameter()
     all_long_parameters[short_time_counter] = 0;
     save_long_parameter(short_time_counter);
     
+    all_long_parameters[long_starts_counter] = 0;
+    save_long_parameter(long_starts_counter);
+
+    all_long_parameters[long_money_counter] = 0;
+    save_long_parameter(long_money_counter);
+
+    all_long_parameters[long_time_counter] = 0;
+    save_long_parameter(long_time_counter);
+
     all_long_parameters[money_counter] = 0;
     save_long_parameter(money_counter);
+}
+
+void reset_short_counters()
+{
+    all_long_parameters[short_starts_counter] = 0;
+    save_long_parameter(short_starts_counter);
+
+    all_long_parameters[short_money_counter] = 0;
+    save_long_parameter(short_money_counter);
+
+    all_long_parameters[short_time_counter] = 0;
+    save_long_parameter(short_time_counter);
 }
 
 /*
@@ -927,8 +988,11 @@ void show_line(byte index_line)
         char line[21];
         sprintf(line,"%s %ld %s", current_menu_screen.menu_lines[index_line].string, 
                                  all_long_parameters[current_menu_screen.menu_lines[index_line].parameter.digit.param_index], 
-                                 current_menu_screen.menu_lines[index_line].parameter.digit.unit);
-        lcd.print(line);        
+                                 current_menu_screen.menu_lines[index_line].parameter.digit.unit[0] >= 0x20 ? 
+                                 current_menu_screen.menu_lines[index_line].parameter.digit.unit :
+                                 "");
+        lcd.print(line);
+        current_menu_screen.menu_lines[index_line].parameter.digit.unit[0] < 0x20 ? lcd.write(0) : 0;
     }
     else if(current_menu_screen.menu_lines[index_line].type == TEXT_PARAM_LINE)
     {
@@ -936,7 +1000,7 @@ void show_line(byte index_line)
         sprintf(line,"%s %s %s", current_menu_screen.menu_lines[index_line].string, 
                                   text_parameters[current_menu_screen.menu_lines[index_line].parameter.text.param_index], 
                                   current_menu_screen.menu_lines[index_line].parameter.text.unit);
-        lcd.print(line); 
+        lcd.print(line);
    }
 }
 
@@ -1007,6 +1071,49 @@ bool read_money_impulse ()
   return impulse;
 }
 
+void start_solarium_work()
+{
+    if(all_byte_parameters[signal_rele]) digitalWrite(lamp_start_pin, HIGH);
+    else digitalWrite(lamp_start_pin, LOW);
+ 
+    switch(all_byte_parameters[solarium_type])
+    {
+        case LUXURA_SOL:
+        break;
+        case FIRESUN_UV_SOL:
+          digitalWrite(vent_pin, HIGH);
+        break;
+        case FIRESUN_UV_K_SOL:
+        break;
+        case SUNFLOWER_SOL:
+          digitalWrite(vent_pin, HIGH);
+        break;
+    }
+}
+
+void stop_solarium_work()
+{
+    if(all_byte_parameters[signal_rele]) digitalWrite(lamp_start_pin, LOW);
+    else digitalWrite(lamp_start_pin, HIGH);
+}
+
+void stop_vent_work()
+{
+    switch(all_byte_parameters[solarium_type])
+    {
+        case LUXURA_SOL:
+        break;
+        case FIRESUN_UV_SOL:
+          digitalWrite(vent_pin, LOW);
+        break;
+        case FIRESUN_UV_K_SOL:
+        break;
+        case SUNFLOWER_SOL:
+          digitalWrite(vent_pin, LOW);
+        break;
+    }
+}
+
 /*
   Прием денег
 */
@@ -1063,8 +1170,10 @@ void get_money ()
           need_clear_menu = true;
           need_reload_menu = true;
 
-          bill_enable =! bill_enable;                   // устанавливаем флаг: не принимаем деньги
+          bill_enable = !bill_enable;                   // устанавливаем флаг: не принимаем деньги
+
           // Запускаем работу солярия
+          start_solarium_work();
         }
     }
 }
@@ -1094,8 +1203,19 @@ void menu()
       }
       if(all_byte_parameters[reset_device])
       {
-          reset_parameter();
+          if(enable_reset) reset_parameter();
           all_byte_parameters[reset_device] = 0;
+      }
+      if(all_byte_parameters[reset_counters])
+      {
+          if(enable_reset) reset_short_counters();
+          all_byte_parameters[reset_counters] = 0;
+      }
+      if(all_byte_parameters[password] == 22)
+      {
+          enable_reset = true;
+          all_byte_parameters[password] = 0;
+          save_byte_parameter(password);
       }
   }
 
@@ -1111,6 +1231,18 @@ void one_half_second()
 
 }
 
+void restart_menu()
+{
+    memcpy_P( &current_menu_screen, &menu_main[0], sizeof(menu_screen));
+    sprintf(text_parameters[time_seance],"");
+    menu_index = 0;
+
+    need_clear_menu = true;
+    need_reload_menu = true;
+
+    bill_enable = !bill_enable;
+}
+
 /*
     Событие секунды
 */
@@ -1124,26 +1256,40 @@ void second_event()
     sprintf(text_parameters[time_seance]," %02d:%02d", minute, second);
     need_reload_menu = true;
 
+    if(menu_index == 4 && time_remain == 0)
+    {
+        restart_menu();
+    }
     if(menu_index == 3 && time_remain == 0)
     {
-        memcpy_P( &current_menu_screen, &menu_main[0], sizeof(menu_screen));
-        sprintf(text_parameters[time_seance],"");
-        menu_index = 0;
+        stop_vent_work();
+
+        memcpy_P( &current_menu_screen, &menu_main[4], sizeof(menu_screen));
+        menu_index = 4;
+        second = 10;
 
         need_clear_menu = true;
         need_reload_menu = true;
-
-        bill_enable =! bill_enable;
     }
     if(menu_index == 2 && time_remain == 0)
     {
-        memcpy_P( &current_menu_screen, &menu_main[3], sizeof(menu_screen));
-        menu_index = 3;
+        stop_solarium_work();
+
+        if(all_byte_parameters[solarium_type] == LUXURA_SOL)
+        {
+            memcpy_P( &current_menu_screen, &menu_main[4], sizeof(menu_screen));
+            menu_index = 4;
+            second = 10;
+        }
+        else
+        {
+            memcpy_P( &current_menu_screen, &menu_main[3], sizeof(menu_screen));
+            menu_index = 3;
+            minute = all_byte_parameters[pause_after] * 60;
+        }
 
         need_clear_menu = true;
         need_reload_menu = true;
-
-        second = 10;
     }
 }
 
@@ -1175,14 +1321,20 @@ void setup()
   pinMode(LEDPin, OUTPUT);                          // инициализируем пин, подключенный к светодиоду, как выход
   pinMode(buttonPin_Service, INPUT_PULLUP);         // инициализируем пин, подключенный к кнопке, как вход
   pinMode(buttonPin_Start, INPUT_PULLUP);           // инициализируем пин, подключенный к кнопке, как вход
+  pinMode(lamp_start_pin, OUTPUT);                  // управление лампами 
+  pinMode(vent_pin, OUTPUT);                        // управление вентиляторами
 
   digitalWrite(LEDPin,LOW);                         // изначально светодиод погашен
   digitalWrite(inhibitPin, LOW);                    // изначально разрешаем прием купюр
+  digitalWrite(lamp_start_pin, LOW);                // изначально выключен
+  digitalWrite(vent_pin, LOW);                      // изначально выключен
 
   load_parameter();
   memcpy_P( &current_menu_screen, &menu_main[0], sizeof(menu_screen));
   sprintf(text_parameters[time_seance],"");
   menu_index = 0;
+
+  all_long_parameters[money_counter] = 0;
 }
 
 void loop() 
