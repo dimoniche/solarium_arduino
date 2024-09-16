@@ -1241,6 +1241,8 @@ void restart_menu()
     need_reload_menu = true;
 
     bill_enable = !bill_enable;
+    
+    digitalWrite(inhibitPin, LOW);
 }
 
 /*
