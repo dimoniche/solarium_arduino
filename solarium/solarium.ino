@@ -120,20 +120,7 @@ unsigned long all_long_parameters[COUNT_LONG_PARAMETER];
 #define time_seance               0
 #define time_delay                1
 #define COUNT_TEXT_PARAMETER      2
-char text_parameters[COUNT_TEXT_PARAMETER][20];
-
-// ============================== Описываем свой символ "Рубль" ========================================================================
-// Просто "рисуем" символ единицами. Единицы при выводе на экран окажутся закрашенными точками, нули - не закрашенными
-const byte rubl[8] = {
-  0b00000,
-  0b01110,
-  0b01001,
-  0b01001,
-  0b01110,
-  0b01000,
-  0b11110,
-  0b01000,
-};
+char text_parameters[COUNT_TEXT_PARAMETER][SIZE_SCREEN_LINE];
 
 LiquidCrystal_I2C lcd(0x27, SIZE_SCREEN_LINE, SIZE_SCREEN);                 // устанавливаем адрес 0x27, и дисплей 16 символов 2 строки
 
@@ -218,7 +205,7 @@ struct parameter_menu {
 struct parameter_digit {
   byte param_index;
   param_limit limit;
-  char unit[5];
+  char unit[8];
 };
 
 struct parameter_list {
@@ -235,7 +222,7 @@ struct parameter_header {
 struct parameter_text {
   byte param_index;
   param_limit limit;
-  char unit[5];
+  char unit[8];
 };
 
 union param_data {
@@ -247,7 +234,7 @@ union param_data {
 };
 
 struct menu_line {
-  char string[SIZE_SCREEN_LINE];
+  char string[SIZE_SCREEN_LINE * 2];
   type_menu_line type;
   
   param_data parameter;
@@ -274,7 +261,7 @@ const menu_screen menu_main[] PROGMEM = {
         {0}
       },
       {
-        "  BHECEHO",
+        "  ВНЕСЕНО",
         DIGIT_VIEW_LINE,
         {
           money_counter,
@@ -282,7 +269,7 @@ const menu_screen menu_main[] PROGMEM = {
               0,
               0,
           },
-          0
+          "руб"
         }
       },
       {
@@ -317,7 +304,7 @@ const menu_screen menu_main[] PROGMEM = {
               0,
               0,
           },
-          "CEK"
+          "СЕК"
         },
       },
     },
@@ -345,7 +332,7 @@ const menu_screen menu_main[] PROGMEM = {
               0,
               0,
           },
-          "MUH"
+          "МИН"
         }
       },
     },
@@ -360,12 +347,12 @@ const menu_screen menu_main[] PROGMEM = {
         {0}
       },
       {
-        "     PAUSE",
+        "     ПАУЗА",
         FIXED_LINE,
         {0}
       },
       {
-        "",
+        "   ",
         TEXT_PARAM_LINE,
         {
           time_seance,
@@ -388,7 +375,7 @@ const menu_screen menu_main[] PROGMEM = {
         {0}
       },
       {
-        "     KOHEU",
+        "     КОНЕЦ",
         FIXED_LINE,
         {0}
       },
@@ -405,17 +392,17 @@ const menu_screen menu_settings[] PROGMEM = {
   {
     {
       {
-        "    MAIN MENU",
+        "ГЛАВНОЕ МЕНЮ",
         FIXED_LINE,
         {0}
       },
       {
-        "Settings",
+        "Настройки",
         MENU_LINE,
         {SETTING_MENU}
       },
       {
-        "Statistic",
+        "Статистика",
         MENU_LINE,
         {STATISTIC_MENU}
       }
@@ -426,27 +413,27 @@ const menu_screen menu_settings[] PROGMEM = {
   {
     {
       {
-        "    SETTINGS",
+        "НАСТРОЙКИ",
         FIXED_LINE,
         {0}
       },
       {
-        "Solarium",
+        "Солярий",
         MENU_LINE,
         {SOLARIUM_MENU}
       },
       {
-        "Bank",
+        "Банк",
         MENU_LINE,
         {BANK_MENU}
       },
       {
-        "Password",
+        "Пароль",
         MENU_LINE,
         {PASSWORD_MENU}
       },
       {
-        "Reset",
+        "Сброс",
         LIST_PARAM_LINE,
         {
           reset_device,
@@ -456,7 +443,7 @@ const menu_screen menu_settings[] PROGMEM = {
           },
           {
               "     ",
-              "start"
+              "запуск"
           }
         }
       },
@@ -467,17 +454,17 @@ const menu_screen menu_settings[] PROGMEM = {
   {
     {
       {
-        "    STATISTIC",
+        "СТАТИСТИКА",
         FIXED_LINE,
         {0}
       },
       {
-        "Long counters",
+        "Длинные счетчики",
         MENU_LINE,
         {LONG_COUNTER_MENU}
       },
       {
-        "Short counters",
+        "Короткие счетчики",
         MENU_LINE,
         {SHORT_COUNTER_MENU}
       }
@@ -488,12 +475,12 @@ const menu_screen menu_settings[] PROGMEM = {
   {
     {
       {
-        "    DEVICE",
+        "СОЛЯРИЙ",
         FIXED_LINE,
         {1}
       },
       {
-        "Pause before",
+        "Пауза до",
         DIGIT_PARAM_LINE,
         {
           pause_before,
@@ -501,11 +488,11 @@ const menu_screen menu_settings[] PROGMEM = {
               0,
               100,
           },
-          "sec"
+          "сек"
         }
       },
       {
-        "Pause after",
+        "Пауза после",
         DIGIT_PARAM_LINE,
         {
           pause_after,
@@ -513,11 +500,11 @@ const menu_screen menu_settings[] PROGMEM = {
               0,
               3,
           },
-          "min"
+          "мин"
         }
       },
       {
-        "Price",
+        "Цена",
         DIGIT_PARAM_LINE,
         {
           price,
@@ -525,11 +512,11 @@ const menu_screen menu_settings[] PROGMEM = {
               0,
               100,
           },
-          0
+          "руб"
         }
       },
       {
-        "Remote start",
+        "Удален.старт",
         LIST_PARAM_LINE,
         {
           remote_start,
@@ -538,13 +525,13 @@ const menu_screen menu_settings[] PROGMEM = {
               1,
           },
           {
-              "Off",
-              "On "
+              "Вкл ",
+              "Выкл"
           }
         }
       },
       {
-        "Type",
+        "Тип",
         LIST_PARAM_LINE,
         {
           solarium_type,
@@ -561,7 +548,7 @@ const menu_screen menu_settings[] PROGMEM = {
         }
       },
       {
-        "Regime",
+        "Режим",
         LIST_PARAM_LINE,
         {
           work_regime,
@@ -576,7 +563,7 @@ const menu_screen menu_settings[] PROGMEM = {
         }
       },
       {
-        "Signal",
+        "Реле",
         LIST_PARAM_LINE,
         {
           signal_rele,
@@ -597,12 +584,12 @@ const menu_screen menu_settings[] PROGMEM = {
   {
     {
       {
-        "    BANK",
+        "БАНК",
         FIXED_LINE,
         {0}
       },
       {
-        "Rub/imp",
+        "Руб/имп",
         DIGIT_PARAM_LINE,
         {
           weight_impulse,
@@ -620,12 +607,12 @@ const menu_screen menu_settings[] PROGMEM = {
   {
     {
       {
-        "    PASSWORD",
+        "УСТАНОВКА ПАРОЛЯ",
         FIXED_LINE,
         {0}
       },
       {
-        "Pasword",
+        "Пароль",
         DIGIT_PARAM_LINE,
         {
           password,
@@ -643,12 +630,12 @@ const menu_screen menu_settings[] PROGMEM = {
   {
     {
       {
-        "LONG COUNTERS",
+        "ДЛИННЫЕ СЧЕТЧИКИ",
         FIXED_LINE,
         {0}
       },
       {
-        "Starts",
+        "Запуски",
         DIGIT_VIEW_LINE,
         {
           long_starts_counter,
@@ -660,7 +647,7 @@ const menu_screen menu_settings[] PROGMEM = {
         }
       },
       {
-        "Money",
+        "Деньги",
         DIGIT_VIEW_LINE,
         {
           long_money_counter,
@@ -668,11 +655,11 @@ const menu_screen menu_settings[] PROGMEM = {
               0,
               0,
           },
-          0
+          "руб"
         }
       },
       {
-        "Time",
+        "Время",
         DIGIT_VIEW_LINE,
         {
           long_time_counter,
@@ -680,7 +667,7 @@ const menu_screen menu_settings[] PROGMEM = {
               0,
               0,
           },
-          "sec"
+          "сек"
         }
       },
     },
@@ -690,12 +677,12 @@ const menu_screen menu_settings[] PROGMEM = {
   {
     {
       {
-        "SHORT COUNTERS",
+        "КОРОТКИЕ СЧЕТЧИКИ",
         FIXED_LINE,
         {0}
       },
       {
-        "Starts",
+        "Запуски",
         DIGIT_VIEW_LINE,
         {
           short_starts_counter,
@@ -707,7 +694,7 @@ const menu_screen menu_settings[] PROGMEM = {
         }
       },
       {
-        "Money",
+        "Деньги",
         DIGIT_VIEW_LINE,
         {
           short_money_counter,
@@ -715,11 +702,11 @@ const menu_screen menu_settings[] PROGMEM = {
               0,
               0,
           },
-          0
+          "руб"
         }
       },
       {
-        "Time",
+        "Время",
         DIGIT_VIEW_LINE,
         {
           short_time_counter,
@@ -727,7 +714,7 @@ const menu_screen menu_settings[] PROGMEM = {
               0,
               0,
           },
-          "sec"
+          "сек"
         }
       },
     },
@@ -952,15 +939,15 @@ void show_line(byte index_line)
 {
     if(current_menu_screen.menu_lines[index_line].type == MENU_LINE)
     {
-        lcd.print(current_menu_screen.menu_lines[index_line].string);
+        lcd.print(convertCyr( utf8rus( current_menu_screen.menu_lines[index_line].string)));
     }
     else if(current_menu_screen.menu_lines[index_line].type == FIXED_LINE)
     {
-        lcd.print(current_menu_screen.menu_lines[index_line].string);
+        lcd.print(convertCyr( utf8rus( current_menu_screen.menu_lines[index_line].string)));
     }
     else if(current_menu_screen.menu_lines[index_line].type == DIGIT_PARAM_LINE)
     {
-        char line[21];
+        char line[SIZE_SCREEN_LINE * 2];
         char format[9] = "%s %d %s";
         if(start_edit_parameter && index_line == current_line_index)
         {
@@ -969,11 +956,11 @@ void show_line(byte index_line)
         sprintf(line,format, current_menu_screen.menu_lines[index_line].string, 
                              all_byte_parameters[current_menu_screen.menu_lines[index_line].parameter.digit.param_index], 
                              current_menu_screen.menu_lines[index_line].parameter.digit.unit);
-        lcd.print(line);
+        lcd.print(convertCyr( utf8rus( line )));
     }
     else if(current_menu_screen.menu_lines[index_line].type == LIST_PARAM_LINE)
     {
-        char line[21];
+        char line[SIZE_SCREEN_LINE * 2];
         char format[6] = "%s %s";
         if(start_edit_parameter && index_line == current_line_index)
         {
@@ -981,26 +968,23 @@ void show_line(byte index_line)
         }
         sprintf(line,format, current_menu_screen.menu_lines[index_line].string, 
                              current_menu_screen.menu_lines[index_line].parameter.list.list_data[all_byte_parameters[current_menu_screen.menu_lines[index_line].parameter.list.param_index]]);
-        lcd.print(line);       
+        lcd.print(convertCyr( utf8rus( line )));
     }
     else if(current_menu_screen.menu_lines[index_line].type == DIGIT_VIEW_LINE)
     {
-        char line[21];
+        char line[SIZE_SCREEN_LINE * 2];
         sprintf(line,"%s %ld %s", current_menu_screen.menu_lines[index_line].string, 
-                                 all_long_parameters[current_menu_screen.menu_lines[index_line].parameter.digit.param_index], 
-                                 current_menu_screen.menu_lines[index_line].parameter.digit.unit[0] >= 0x20 ? 
-                                 current_menu_screen.menu_lines[index_line].parameter.digit.unit :
-                                 "");
-        lcd.print(line);
-        current_menu_screen.menu_lines[index_line].parameter.digit.unit[0] < 0x20 ? lcd.write(0) : 0;
+                                 all_long_parameters[current_menu_screen.menu_lines[index_line].parameter.digit.param_index],    
+                                 current_menu_screen.menu_lines[index_line].parameter.digit.unit);
+        lcd.print(convertCyr( utf8rus( line )));
     }
     else if(current_menu_screen.menu_lines[index_line].type == TEXT_PARAM_LINE)
     {
-        char line[21];
+        char line[SIZE_SCREEN_LINE * 2];
         sprintf(line,"%s %s %s", current_menu_screen.menu_lines[index_line].string, 
                                   text_parameters[current_menu_screen.menu_lines[index_line].parameter.text.param_index], 
                                   current_menu_screen.menu_lines[index_line].parameter.text.unit);
-        lcd.print(line);
+        lcd.print(convertCyr( utf8rus( line )));
    }
 }
 
@@ -1125,12 +1109,15 @@ void get_money ()
     remain = all_long_parameters[money_counter] % all_byte_parameters[price];
     second = remain * 60 / all_byte_parameters[price];
 
-    if(impulse) need_reload_menu = true;
+    if(impulse)
+    {
+        need_reload_menu = true;
+    }
   
     if (all_long_parameters[money_counter] >= all_byte_parameters[price])
     {
         // достаточно денег для оказания услуги
-        sprintf(text_parameters[time_seance]," CEAHC %02d:%02d MUH", minute, second);
+        sprintf(text_parameters[time_seance],"СЕАНС %02d:%02d МИН", minute, second);
 
         digitalWrite(LEDPin, HIGH);                     // зажигаем светодиод 
 
@@ -1287,7 +1274,7 @@ void second_event()
         {
             memcpy_P( &current_menu_screen, &menu_main[3], sizeof(menu_screen));
             menu_index = 3;
-            minute = all_byte_parameters[pause_after] * 60;
+            minute = all_byte_parameters[pause_after];
         }
 
         need_clear_menu = true;
@@ -1316,7 +1303,6 @@ void setup()
 
   lcd.init();                                       // инициализация LCD
   lcd.backlight();                                  // включаем подсветку
-  lcd.createChar(0, rubl);                          // создаем символ и записываем его в память LCD по 0 адресу
 
   pinMode(inhibitPin, OUTPUT);                      // устанавливает режим работы - выход
   pinMode(moneyPin, INPUT_PULLUP);                  // устанавливает режим работы - вход, подтягиваем к +5В через встроенный подтягивающий резистор (на всякий случай)
@@ -1372,4 +1358,121 @@ void loop()
   {
     countdown_timer();                              // запускаем таймер обратного отсчета
   }
+}
+
+String utf8rus(String source) {
+  int i,k;
+  String target;
+  unsigned char n;
+  char m[2] = { '0', '\0' };
+
+  k = source.length(); i = 0;
+
+  while (i < k) {
+    n = source[i]; i++;
+
+    if (n >= 0xC0) {
+      switch (n) {
+        case 0xD0: {
+          n = source[i]; i++;
+          if (n == 0x81) { n = 0xA8; break; }
+          if (n >= 0x90 && n <= 0xBF) n = n + 0x30;
+          break;
+        }
+        case 0xD1: {
+          n = source[i]; i++;
+          if (n == 0x91) { n = 0xB8; break; }
+          if (n >= 0x80 && n <= 0x8F) n = n + 0x70;
+          break;
+        }
+      }
+    }
+    m[0] = n; target = target + String(m);
+  }
+  return target;
+}
+
+String convertCyr( const String &s ){
+  String target = s;
+  for( int idx = 0; idx<s.length(); idx++ ){
+    target[idx] = getCharCyr( s[idx] );
+  }
+  return target;
+}
+
+uint8_t getCharCyr( uint8_t ch ){
+  char rch = ch;
+  switch (ch){
+    case 0xC0: rch = 0x41; break;
+    case 0xC1: rch = 0xA0; break;
+    case 0xC2: rch = 0x42; break;
+    case 0xC3: rch = 0xA1; break;
+    case 0xC4: rch = 0xE0; break;
+    case 0xC5: rch = 0x45; break;
+    case 0xC6: rch = 0xA3; break;
+    case 0xC7: rch = 0xA4; break;
+    case 0xC8: rch = 0xA5; break;
+    case 0xC9: rch = 0xA6; break;
+    case 0xCA: rch = 0x4B; break;
+    case 0xCB: rch = 0xA7; break;
+    case 0xCC: rch = 0x4D; break;
+    case 0xCD: rch = 0x48; break;
+    case 0xCE: rch = 0x4F; break;
+    case 0xCF: rch = 0xA8; break;
+
+    case 0xD0: rch = 0x50; break;
+    case 0xD1: rch = 0x43; break;
+    case 0xD2: rch = 0x54; break;
+    case 0xD3: rch = 0xA9; break;
+    case 0xD4: rch = 0xAA; break;
+    case 0xD5: rch = 0x58; break;
+    case 0xD6: rch = 0xE1; break;
+    case 0xD7: rch = 0xAB; break;
+    case 0xD8: rch = 0xAC; break;
+    case 0xD9: rch = 0xE2; break;
+    case 0xDA: rch = 0xAD; break;
+    case 0xDB: rch = 0xAE; break;
+    case 0xDC: rch = 0x62; break;
+    case 0xDD: rch = 0xAF; break;
+    case 0xDE: rch = 0xB0; break;
+    case 0xDF: rch = 0xB1; break;
+
+    case 0xE0: rch = 0x61; break;
+    case 0xE1: rch = 0xB2; break;
+    case 0xE2: rch = 0xB3; break;
+    case 0xE3: rch = 0xB4; break;
+    case 0xE4: rch = 0xE3; break;
+    case 0xE5: rch = 0x65; break;
+    case 0xE6: rch = 0xB6; break;
+    case 0xE7: rch = 0xB7; break;
+    case 0xE8: rch = 0xB8; break;
+    case 0xE9: rch = 0xB9; break;
+    case 0xEA: rch = 0xBA; break;
+    case 0xEB: rch = 0xBB; break;
+    case 0xEC: rch = 0xBC; break;
+    case 0xED: rch = 0xBD; break;
+    case 0xEE: rch = 0x6F; break;
+    case 0xEF: rch = 0xBE; break;
+
+    case 0xF0: rch = 0x70; break;
+    case 0xF1: rch = 0x63; break;
+    case 0xF2: rch = 0xBF; break;
+    case 0xF3: rch = 0x79; break;
+    case 0xF4: rch = 0xE4; break;
+    case 0xF5: rch = 0x78; break;
+    case 0xF6: rch = 0xE5; break;
+    case 0xF7: rch = 0xC0; break;
+    case 0xF8: rch = 0xC1; break;
+    case 0xF9: rch = 0xE6; break;
+    case 0xFA: rch = 0xC2; break;
+    case 0xFB: rch = 0xC3; break;
+    case 0xFC: rch = 0xC4; break;
+    case 0xFD: rch = 0xC5; break;
+    case 0xFE: rch = 0xC6; break;
+    case 0xFF: rch = 0xC7; break;
+
+    case 0xA8: rch = 0xA2; break;
+    case 0xB8: rch = 0xB5; break;
+  }
+  return rch;
 }
