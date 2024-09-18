@@ -8,6 +8,9 @@
 // ===============================задаем константы =========================================================================
 const byte moneyPin = 2;                            // номер пина, к которому подключён купюроприемник, DB2
 const byte inhibitPin = 4;                          // +Inhibit (зеленый) на купюроприемник, DB4
+//const byte buttonPin_Start = 15;                    // номер входа, подключенный к кнопке "Старт", А0
+//const byte buttonPin_Service = 14;                  // номер входа, подключенный к кнопке "Сервис", А1
+//const byte LEDPin = 13;                             // номер выхода светодиода кнопки Старт, DB13
 const byte buttonPin_Start = 15;                    // номер входа, подключенный к кнопке "Старт", А0
 const byte buttonPin_Service = 13;                  // номер входа, подключенный к кнопке "Сервис", А1
 const byte LEDPin = 14;                             // номер выхода светодиода кнопки Старт, DB13
@@ -442,7 +445,7 @@ const menu_screen menu_settings[] PROGMEM = {
               1,
           },
           {
-              "     ",
+              "      ",
               "запуск"
           }
         }
@@ -467,9 +470,24 @@ const menu_screen menu_settings[] PROGMEM = {
         "Короткие счетчики",
         MENU_LINE,
         {SHORT_COUNTER_MENU}
-      }
+      },
+      {
+        "Сброс",
+        LIST_PARAM_LINE,
+        {
+          reset_counters,
+          {
+              0,
+              1,
+          },
+          {
+              "      ",
+              "запуск"
+          }
+        }
+      },
     },
-    3
+    4
   },
   // Меню 3
   {
@@ -525,8 +543,8 @@ const menu_screen menu_settings[] PROGMEM = {
               1,
           },
           {
-              "Вкл ",
-              "Выкл"
+              "Выкл",
+              "Вкл "
           }
         }
       },
