@@ -18,7 +18,7 @@ const byte LEDPin = 14;                             // номер выхода �
 // ноги управления соляриями
 const byte lamp_start_pin = 5;          // Запуск солярия Luxura. Включение ламп солярия FireSun, SunFlower
 const byte vent_pin = 6;                // Включение вентиляторов солярия FireSun, SunFlower
-const byte start_solarium = 7;          // Удаленный старт от солярия
+const byte start_solarium_pin = 7;      // Удаленный старт от солярия, DB7
 
 const byte Device_SerNum = 1;                       // серийный номер устройства
 const PROGMEM char Device_Ver[] = "0.0";            // версия ПО устройства
@@ -251,6 +251,13 @@ struct menu_screen {
 // текущее меню
 menu_screen current_menu_screen;
 
+#define WAIT_MONEY              0
+#define WAIT_BEFORE             1
+#define SEANCE_SCREEN           2
+#define WAIT_AFTER              3
+#define SCREEN_END              4
+#define SCREEN_START_SOL        5
+
 /*
   Описание основного меню
 */
@@ -379,6 +386,22 @@ const menu_screen menu_main[] PROGMEM = {
       },
       {
         "     КОНЕЦ",
+        FIXED_LINE,
+        {0}
+      },
+    },
+    2
+  },
+  // Удаленный запуск
+  {
+    {
+      {
+        "",
+        FIXED_LINE,
+        {0}
+      },
+      {
+        "ОТЛОЖЕННЫЙ СТАРТ",
         FIXED_LINE,
         {0}
       },
@@ -534,7 +557,7 @@ const menu_screen menu_settings[] PROGMEM = {
         }
       },
       {
-        "Удален.старт",
+        "Отложен.старт",
         LIST_PARAM_LINE,
         {
           remote_start,
@@ -1162,14 +1185,33 @@ void get_money ()
             save_long_parameter(money_counter);
           }
 
-          // задержка до запуска
-          memcpy_P( &current_menu_screen, &menu_main[1], sizeof(menu_screen));
-          sprintf(text_parameters[time_delay],"%2d", all_byte_parameters[pause_before]);
-          lcd.clear();
-          show_menu();
-          delay(all_byte_parameters[pause_before] * 1000);
+          if(all_byte_parameters[remote_start])
+          {
+              // удаленный старт кнопкой
+              memcpy_P( &current_menu_screen, &menu_main[SCREEN_START_SOL], sizeof(menu_screen));
+              lcd.clear();
+              show_menu();
 
-          memcpy_P( &current_menu_screen, &menu_main[2], sizeof(menu_screen));
+              while(1)
+              {
+                  if (digitalRead(start_solarium_pin) == LOW)
+                  {
+                      break;
+                  }
+                  delay(1);
+              }
+          }
+          else
+          {
+              // задержка до запуска
+              memcpy_P( &current_menu_screen, &menu_main[WAIT_BEFORE], sizeof(menu_screen));
+              sprintf(text_parameters[time_delay],"%2d", all_byte_parameters[pause_before]);
+              lcd.clear();
+              show_menu();
+              delay(all_byte_parameters[pause_before] * 1000);
+          }
+
+          memcpy_P( &current_menu_screen, &menu_main[SEANCE_SCREEN], sizeof(menu_screen));
           menu_index = 2;
           sprintf(text_parameters[time_seance]," %02d:%02d", minute, second);
           need_clear_menu = true;
@@ -1238,7 +1280,7 @@ void one_half_second()
 
 void restart_menu()
 {
-    memcpy_P( &current_menu_screen, &menu_main[0], sizeof(menu_screen));
+    memcpy_P( &current_menu_screen, &menu_main[WAIT_MONEY], sizeof(menu_screen));
     sprintf(text_parameters[time_seance],"");
     menu_index = 0;
 
@@ -1263,35 +1305,35 @@ void second_event()
     sprintf(text_parameters[time_seance]," %02d:%02d", minute, second);
     need_reload_menu = true;
 
-    if(menu_index == 4 && time_remain == 0)
+    if(menu_index == SCREEN_END && time_remain == 0)
     {
         restart_menu();
     }
-    if(menu_index == 3 && time_remain == 0)
+    if(menu_index == WAIT_AFTER && time_remain == 0)
     {
         stop_vent_work();
 
-        memcpy_P( &current_menu_screen, &menu_main[4], sizeof(menu_screen));
-        menu_index = 4;
+        memcpy_P( &current_menu_screen, &menu_main[SCREEN_END], sizeof(menu_screen));
+        menu_index = SCREEN_END;
         second = 10;
 
         need_clear_menu = true;
         need_reload_menu = true;
     }
-    if(menu_index == 2 && time_remain == 0)
+    if(menu_index == SEANCE_SCREEN && time_remain == 0)
     {
         stop_solarium_work();
 
         if(all_byte_parameters[solarium_type] == LUXURA_SOL)
         {
-            memcpy_P( &current_menu_screen, &menu_main[4], sizeof(menu_screen));
-            menu_index = 4;
+            memcpy_P( &current_menu_screen, &menu_main[SCREEN_END], sizeof(menu_screen));
+            menu_index = SCREEN_END;
             second = 10;
         }
         else
         {
-            memcpy_P( &current_menu_screen, &menu_main[3], sizeof(menu_screen));
-            menu_index = 3;
+            memcpy_P( &current_menu_screen, &menu_main[WAIT_AFTER], sizeof(menu_screen));
+            menu_index = WAIT_AFTER;
             minute = all_byte_parameters[pause_after];
         }
 
@@ -1329,6 +1371,7 @@ void setup()
   pinMode(buttonPin_Start, INPUT_PULLUP);           // инициализируем пин, подключенный к кнопке, как вход
   pinMode(lamp_start_pin, OUTPUT);                  // управление лампами 
   pinMode(vent_pin, OUTPUT);                        // управление вентиляторами
+  pinMode(start_solarium_pin, INPUT_PULLUP);        // удаленный старт солярия
 
   digitalWrite(LEDPin,LOW);                         // изначально светодиод погашен
   digitalWrite(inhibitPin, LOW);                    // изначально разрешаем прием купюр
@@ -1336,7 +1379,7 @@ void setup()
   digitalWrite(vent_pin, LOW);                      // изначально выключен
 
   load_parameter();
-  memcpy_P( &current_menu_screen, &menu_main[0], sizeof(menu_screen));
+  memcpy_P( &current_menu_screen, &menu_main[WAIT_MONEY], sizeof(menu_screen));
   sprintf(text_parameters[time_seance],"");
   menu_index = 0;
 
@@ -1353,7 +1396,7 @@ void loop()
   {
       menu();
       need_reload_menu = true;
-      memcpy_P( &current_menu_screen, &menu_main[0], sizeof(menu_screen));
+      memcpy_P( &current_menu_screen, &menu_main[WAIT_MONEY], sizeof(menu_screen));
   }
   else
   {
