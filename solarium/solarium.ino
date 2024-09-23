@@ -87,6 +87,11 @@ bool enable_reset = false;                          // разрешение сб
 #define SUNFLOWER_SOL             3
 
 #define solarium_type             4
+
+#define UV_REGIME                 0
+#define COLLATEN_REGIME           1
+#define UV_COLLATEN_REGIME        2
+
 #define work_regime               5
 #define signal_rele               6
 #define weight_impulse            7
@@ -599,7 +604,8 @@ const menu_screen menu_settings[] PROGMEM = {
           },
           {
               "Kollaten",
-              "UV      "
+              "UV      ",
+              "UV+Koll "
           }
         }
       },
@@ -1096,44 +1102,85 @@ bool read_money_impulse ()
   return impulse;
 }
 
+/*
+  Запуск работы соляриев
+*/
 void start_solarium_work()
 {
-    if(all_byte_parameters[signal_rele]) digitalWrite(lamp_start_pin, HIGH);
-    else digitalWrite(lamp_start_pin, LOW);
- 
     switch(all_byte_parameters[solarium_type])
     {
         case LUXURA_SOL:
+          if(all_byte_parameters[signal_rele]) digitalWrite(lamp_start_pin, HIGH);
+          else digitalWrite(lamp_start_pin, LOW);
         break;
         case FIRESUN_UV_SOL:
           digitalWrite(vent_pin, HIGH);
+          digitalWrite(lamp_start_pin, HIGH);
+          delay(500);
+          digitalWrite(lamp_start_pin, LOW);
+          delay(1000);
         break;
         case FIRESUN_UV_K_SOL:
+          digitalWrite(vent_pin, HIGH);
+          digitalWrite(lamp_start_pin, HIGH);
+          switch(all_byte_parameters[work_regime])
+          {
+              case UV_REGIME:
+                delay(500);
+                digitalWrite(lamp_start_pin, LOW);
+                delay(1000);
+              break;
+              case COLLATEN_REGIME:
+                delay(500);
+                digitalWrite(lamp_start_pin, LOW);
+                delay(500);
+                digitalWrite(lamp_start_pin, HIGH);
+                delay(500);
+                digitalWrite(lamp_start_pin, LOW);
+                delay(500);
+              break;
+              case UV_COLLATEN_REGIME:
+                delay(500);
+                digitalWrite(lamp_start_pin, LOW);
+                delay(500);
+              break;
+          }
+          digitalWrite(lamp_start_pin, HIGH);
         break;
         case SUNFLOWER_SOL:
           digitalWrite(vent_pin, HIGH);
+          digitalWrite(lamp_start_pin, HIGH);
         break;
     }
 }
 
+/*
+    Остановка ламп соляриев
+*/
 void stop_solarium_work()
 {
-    if(all_byte_parameters[signal_rele]) digitalWrite(lamp_start_pin, LOW);
-    else digitalWrite(lamp_start_pin, HIGH);
+    switch(all_byte_parameters[solarium_type])
+    {
+      case LUXURA_SOL:
+        if(all_byte_parameters[signal_rele]) digitalWrite(lamp_start_pin, LOW);
+        else digitalWrite(lamp_start_pin, HIGH);
+      break;
+      default:
+        digitalWrite(lamp_start_pin, LOW);
+      break;
+    }
 }
 
+/*
+    Остановка вентилятора
+*/
 void stop_vent_work()
 {
     switch(all_byte_parameters[solarium_type])
     {
         case LUXURA_SOL:
         break;
-        case FIRESUN_UV_SOL:
-          digitalWrite(vent_pin, LOW);
-        break;
-        case FIRESUN_UV_K_SOL:
-        break;
-        case SUNFLOWER_SOL:
+        default:
           digitalWrite(vent_pin, LOW);
         break;
     }
