@@ -26,13 +26,12 @@ const PROGMEM char Device_Date[] = "09/09/24";      // дата производ
 const unsigned long block = 500000;                 // блокировка устройства при превышении этой суммы денег
 
 //======Переменные обработки клавиш=================
-boolean lastReading = false;                        // флаг предыдущего состояния кнопки
-boolean buttonSingle = false;                       // флаг состояния "краткое нажатие"
-boolean buttonDouble = false;                       // флаг состояния "двойное нажатие"
-boolean buttonHold = false;                         // флаг состояния "долгое нажатие"
-unsigned long onTime = 0;                           // переменная обработки временного интервала
-unsigned long lastSwitchTime = 0;                   // переменная времени предыдущего переключения состояния
-unsigned long ledStartTime = 0;                     // переменная-флаг времени начала включения LED
+boolean lastReading[2] = {false, false};            // флаг предыдущего состояния кнопки
+boolean buttonSingle[2] = {false, false};           // флаг состояния "краткое нажатие"
+boolean buttonDouble[2] = {false, false};           // флаг состояния "двойное нажатие"
+boolean buttonHold[2] = {false, false};             // флаг состояния "долгое нажатие"
+unsigned long onTime[2] = {0, 0};                   // переменная обработки временного интервала
+unsigned long lastSwitchTime[2] = {0, 0};           // переменная времени предыдущего переключения состояния
 
 const int bounceTime = 10;                          // задержка для подавления дребезга
 const int holdTime = 1000;                          // время, в течение которого нажатие можно считать удержанием кнопки
@@ -135,50 +134,56 @@ LiquidCrystal_I2C lcd(0x27, SIZE_SCREEN_LINE, SIZE_SCREEN);                 // �
 void read_buttons(byte x)
 {
   boolean reading = !digitalRead(x);
+  int index = (x == buttonPin_Service ? 0 : 1);
 
-  if (reading && !lastReading)                      // проверка первичного нажатия
+  if (reading && !lastReading[index])              // проверка первичного нажатия
   {
-    onTime = millis(); 
+    onTime[index] = millis();
+    !index ? Serial.println("click button Service") : Serial.println("click button Start"); 
   }
-  if (reading && lastReading)                       // проверка удержания
+  if (reading && lastReading[index])               // проверка удержания
   {
-    if ((millis() - onTime) > holdTime)
+    if ((millis() - onTime[index]) > holdTime)
     {
-      buttonHold = true;
+      buttonHold[index] = true;
+      !index ? Serial.println("buttonHold Service") : Serial.println("buttonHold Start");
       digitalWrite(LEDPin, !digitalRead(LEDPin));   // при удержании кнопки мигает светодиод
+      isButtonHoldRepeate(x);
     }
   }
-  if (!reading && lastReading)                      // проверка отпускания кнопки
+  if (!reading && lastReading[index])              // проверка отпускания кнопки
   {
-    if (((millis() - onTime) > bounceTime) && !buttonHold)
+    if (((millis() - onTime[index]) > bounceTime) && !buttonHold[index])
     {
-      if ((millis() - lastSwitchTime) >= doubleTime)
+      if ((millis() - lastSwitchTime[index]) >= doubleTime)
       {
-        lastSwitchTime = millis();
-        buttonSingle = true;
+        lastSwitchTime[index] = millis();
+        buttonSingle[index] = true;
+        !index ? Serial.println("buttonSingle Service") : Serial.println("buttonSingle Start");
       }
       else
       {
-        lastSwitchTime = millis();
-        buttonDouble = true;
-        buttonSingle = false;
-        isButtonDouble();
-        buttonDouble = false;                       // сброс состояния после выполнения команды
+        lastSwitchTime[index] = millis();
+        buttonDouble[index] = true;
+        !index ? Serial.println("buttonDouble Service") : Serial.println("buttonDouble Start");
+        buttonSingle[index] = false;
+        buttonDouble[index] = false;                 // сброс состояния после выполнения команды
+        isButtonDouble(x);
       }
     }
-    if (buttonHold)
+    if (buttonHold[index])
     {
-      buttonDouble = false;
-      isButtonHold();
-      buttonHold = false;                           // сброс состояния после выполнения команды
+      buttonDouble[index] = false;
+      buttonHold[index] = false;                     // сброс состояния после выполнения команды
+      isButtonHold(x);
     }
   }
-  lastReading = reading;
-  if (buttonSingle && (millis() - lastSwitchTime) > doubleTime)
+  lastReading[index] = reading;
+  if (buttonSingle[index] && (millis() - lastSwitchTime[index]) > doubleTime)
   {
-    buttonDouble = false;
-    isButtonSingle();
-    buttonSingle = false;                           // сброс состояния после выполнения команды
+    buttonDouble[index] = false;
+    buttonSingle[index] = false;                     // сброс состояния после выполнения команды
+    isButtonSingle(x);
   }
 }
 
@@ -219,7 +224,7 @@ struct parameter_digit {
 struct parameter_list {
   byte param_index;
   param_limit limit;
-  char list_data[4][13];
+  char list_data[4][11];
 };
 
 struct parameter_header {
@@ -586,10 +591,10 @@ const menu_screen menu_settings[] PROGMEM = {
               3,
           },
           {
-              "Luxura      ",
-              "FireSun UV  ",
-              "FireSun UV+K",
-              "SunFlower   "
+              "Luxura   ",
+              "FS UV    ",
+              "FS UV+K  ",
+              "SunFlower"
           }
         }
       },
@@ -858,11 +863,48 @@ void reset_short_counters()
 }
 
 /*
+  удержание кнопки на повторе
+*/
+void isButtonHoldRepeate(byte x)
+{
+    need_reload_menu = true;
+
+    if(x == buttonPin_Start)
+    {
+        if(start_edit_parameter)
+        {
+            Serial.println("isButtonHoldRepeate");
+            if(current_menu_screen.menu_lines[current_line_index].type == DIGIT_PARAM_LINE)
+            {
+                if(all_byte_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index]++ >= current_menu_screen.menu_lines[current_line_index].parameter.digit.limit.max)
+                {
+                    all_byte_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index] = current_menu_screen.menu_lines[current_line_index].parameter.digit.limit.min;
+                }
+            }
+            else if(current_menu_screen.menu_lines[current_line_index].type == LIST_PARAM_LINE)
+            {
+                if(all_byte_parameters[current_menu_screen.menu_lines[current_line_index].parameter.list.param_index]++ >= current_menu_screen.menu_lines[current_line_index].parameter.list.limit.max)
+                {
+                    all_byte_parameters[current_menu_screen.menu_lines[current_line_index].parameter.list.param_index] = current_menu_screen.menu_lines[current_line_index].parameter.list.limit.min;
+                }
+            }
+        }
+
+        return;
+    }
+}
+
+/*
   удержание кнопки
 */
-void isButtonHold()
+void isButtonHold(byte x)
 {
   need_reload_menu = true;
+
+  if(x == buttonPin_Start)
+  {
+      return;
+  }
 
   if(!menu_enable)
   {
@@ -875,20 +917,7 @@ void isButtonHold()
   }
   else
   {
-      if(start_edit_parameter)
-      {
-          start_edit_parameter = false;
-          need_hide_cursor = false;
-          if(current_menu_screen.menu_lines[current_line_index].type == DIGIT_PARAM_LINE)
-          {
-              save_byte_parameter(current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index);
-          }
-          else if(current_menu_screen.menu_lines[current_line_index].type == LIST_PARAM_LINE)
-          {
-              save_byte_parameter(current_menu_screen.menu_lines[current_line_index].parameter.list.param_index);
-          }
-      }
-      else
+      if(!start_edit_parameter)
       {
           if(menu_index == MAIN_MENU) 
           {
@@ -912,11 +941,11 @@ void isButtonHold()
 /*
   одиночное нажатие кнопки
 */
-void isButtonSingle() 
+void isButtonSingle(byte x) 
 {
   need_reload_menu = true;
 
-  if(start_edit_parameter)
+  if(start_edit_parameter && (x == buttonPin_Start || x == buttonPin_Service))
   {
       if(current_menu_screen.menu_lines[current_line_index].type == DIGIT_PARAM_LINE)
       {
@@ -933,7 +962,7 @@ void isButtonSingle()
           }
       }
   }
-  else
+  else if(x == buttonPin_Service)
   {
       last_cursor_index = cursor_index;
       cursor_index++;
@@ -956,10 +985,14 @@ void isButtonSingle()
 /*
   двойное нажатие кнопки
 */
-void isButtonDouble() 
+void isButtonDouble(byte x) 
 {
     need_reload_menu = true;
 
+    if(x == buttonPin_Start) {
+        return;
+    }
+    
     if(current_menu_screen.menu_lines[current_line_index].type == MENU_LINE)
     {
         last_menu_index[menu_inter] = menu_index;
@@ -978,6 +1011,17 @@ void isButtonDouble()
             start_edit_parameter = true;
             hide_cursor();
             need_hide_cursor = true;
+        } else {
+            start_edit_parameter = false;
+            need_hide_cursor = false;
+            if(current_menu_screen.menu_lines[current_line_index].type == DIGIT_PARAM_LINE)
+            {
+                save_byte_parameter(current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index);
+            }
+            else if(current_menu_screen.menu_lines[current_line_index].type == LIST_PARAM_LINE)
+            {
+                save_byte_parameter(current_menu_screen.menu_lines[current_line_index].parameter.list.param_index);
+            }
         }
     } 
 }
@@ -995,7 +1039,7 @@ void show_line(byte index_line)
     else if(current_menu_screen.menu_lines[index_line].type == DIGIT_PARAM_LINE)
     {
         char line[SIZE_SCREEN_LINE * 2];
-        char format[9] = "%s %d %s";
+        char format[11] = "%s %d %s  ";
         if(start_edit_parameter && index_line == current_line_index)
         {
            format[2] = '>';
@@ -1008,7 +1052,7 @@ void show_line(byte index_line)
     else if(current_menu_screen.menu_lines[index_line].type == LIST_PARAM_LINE)
     {
         char line[SIZE_SCREEN_LINE * 2];
-        char format[6] = "%s %s";
+        char format[8] = "%s %s  ";
         if(start_edit_parameter && index_line == current_line_index)
         {
            format[2] = '>';
@@ -1283,6 +1327,7 @@ void menu()
   while (menu_enable == true)
   {
       read_buttons(buttonPin_Service);
+      read_buttons(buttonPin_Start);
 
       if(need_clear_menu)
       {
@@ -1436,6 +1481,7 @@ void setup()
 void loop() 
 {
   read_buttons(buttonPin_Service);
+  read_buttons(buttonPin_Start);
   hide_cursor();
   need_hide_cursor = true;
 
