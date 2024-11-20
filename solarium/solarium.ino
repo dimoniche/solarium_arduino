@@ -73,8 +73,6 @@ boolean need_clear_menu = false;                    // флаг очистки �
 boolean need_hide_cursor = false;                   // флаг скытия курсора на экране
 boolean start_edit_parameter = false;               // флаг старта редактирования параметра
 
-bool enable_reset = false;                          // разрешение сброса настроек
-
 // Переменные для работы с соляриями
 #define pause_before              0
 #define pause_after               1
@@ -95,9 +93,7 @@ bool enable_reset = false;                          // разрешение сб
 #define work_regime               5
 #define signal_rele               6
 #define weight_impulse            7
-#define reset_device              8
-#define reset_counters            9
-#define COUNT_BYTE_PARAMETER      10
+#define COUNT_BYTE_PARAMETER      8
 byte all_byte_parameters[COUNT_BYTE_PARAMETER];
 
 const byte all_byte_parameters_default[COUNT_BYTE_PARAMETER] = {
@@ -109,8 +105,6 @@ const byte all_byte_parameters_default[COUNT_BYTE_PARAMETER] = {
   0,
   0,
   10,
-  0,
-  0,
 };
 
 #define long_starts_counter       0
@@ -125,9 +119,10 @@ const byte all_byte_parameters_default[COUNT_BYTE_PARAMETER] = {
 unsigned long all_long_parameters[COUNT_LONG_PARAMETER];
 
 #define time_seance               0
-#define time_delay                1
-#define COUNT_TEXT_PARAMETER      2
-char text_parameters[COUNT_TEXT_PARAMETER][SIZE_SCREEN_LINE];
+#define time_delay                0
+#define stage_password            0
+#define COUNT_TEXT_PARAMETER      1
+char text_parameters[COUNT_TEXT_PARAMETER][SIZE_SCREEN_LINE*2];
 
 LiquidCrystal_I2C lcd(0x27, SIZE_SCREEN_LINE, SIZE_SCREEN);                 // устанавливаем адрес 0x27, и дисплей 16 символов 2 строки
 
@@ -198,7 +193,8 @@ void read_buttons(byte x)
 #define SOLARIUM_MENU         8
 #define SOLARIUM_MENU_PAY     9
 #define SOLARIUM_MENU_DEV     10
-#define RESET_MENU            11
+#define RESET_DEVICE_MENU     11
+#define RESET_COUNTER_MENU    12
 
 enum type_menu_line {
   MENU_LINE = 0,
@@ -477,7 +473,7 @@ const menu_screen menu_settings[] PROGMEM = {
       {
         "Сброс настроек",
         MENU_LINE,
-        {RESET_MENU}
+        {RESET_DEVICE_MENU}
       },
     },
     5
@@ -502,18 +498,8 @@ const menu_screen menu_settings[] PROGMEM = {
       },
       {
         "Обнуление",
-        LIST_PARAM_LINE,
-        {
-          reset_counters,
-          {
-              0,
-              1,
-          },
-          {
-              "      ",
-              "запуск"
-          }
-        }
+        MENU_LINE,
+        {RESET_COUNTER_MENU}
       },
     },
     4
@@ -596,8 +582,20 @@ const menu_screen menu_settings[] PROGMEM = {
           " "
         }
       },
+      {
+        "",
+        TEXT_PARAM_LINE,
+        {
+          stage_password,
+          {
+              0,
+              0,
+          },
+          ""
+        },
+      },
     },
-    2
+    3
   },
   // Меню 6
   {
@@ -836,8 +834,55 @@ const menu_screen menu_settings[] PROGMEM = {
           ""
         }
       },
+      {
+        "",
+        TEXT_PARAM_LINE,
+        {
+          stage_password,
+          {
+              0,
+              0,
+          },
+          ""
+        },
+      },
     },
-    2
+    3
+  },
+  // Меню 12
+  {
+    {
+      {
+        "",
+        FIXED_LINE,
+        {1}
+      },
+      {
+        "",
+        PASSWORD_VERIFY_LINE,
+        {
+          password,
+          {
+              0,
+              9999,
+          },
+          ""
+        }
+      },
+      {
+        "",
+        TEXT_PARAM_LINE,
+        {
+          stage_password,
+          {
+              0,
+              0,
+          },
+          ""
+        },
+      },
+    },
+    3
   },
 };
 
@@ -1049,6 +1094,10 @@ void isButtonSingle(byte x)
             while(dig--) { scale *= 10; }
 
             all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index] += scale;
+
+            Serial.print(all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index]);
+            Serial.println("");
+            Serial.print(temp_password);
           }
           else
           {
@@ -1089,6 +1138,8 @@ void isButtonDouble(byte x)
     
     if(current_menu_screen.menu_lines[current_line_index].type == MENU_LINE)
     {
+        sprintf(text_parameters[stage_password],"");
+ 
         last_menu_index[menu_inter] = menu_index;
         last_menu_cursor_index[menu_inter] = current_line_index;
         menu_inter++;
@@ -1109,16 +1160,16 @@ void isButtonDouble(byte x)
             {
                 temp_password = all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index];
                 all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index] = 0;
-
                 password_stage = 0;
+                sprintf(text_parameters[stage_password],"Введите старый");
                 current_digit = 4;
             }
             else if(current_menu_screen.menu_lines[current_line_index].type == PASSWORD_VERIFY_LINE)
             {
                 temp_password = all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index];
                 all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index] = 0;
- 
                 password_stage = 0;
+                sprintf(text_parameters[stage_password],"Введите пароль");
                 current_digit = 4;
             }
 
@@ -1128,6 +1179,7 @@ void isButtonDouble(byte x)
         } else {
             start_edit_parameter = false;
             need_hide_cursor = false;
+
             if(current_menu_screen.menu_lines[current_line_index].type == DIGIT_PARAM_LINE)
             {
                 save_byte_parameter(current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index);
@@ -1138,7 +1190,55 @@ void isButtonDouble(byte x)
             }
             else if(current_menu_screen.menu_lines[current_line_index].type == PASSWORD_SET_LINE)
             {
-                save_long_parameter(current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index);
+                if(password_stage == 0)
+                {
+                    if(temp_password == all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index])
+                    {
+                        start_edit_parameter = true;
+                        hide_cursor();
+                        need_hide_cursor = true;
+
+                        sprintf(text_parameters[stage_password],"Введите новый");
+                        all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index] = 0;
+                        password_stage = 1;
+                    }
+                    else
+                    {
+                        sprintf(text_parameters[stage_password],"Неверный пароль");
+                        password_stage = 0;
+                        all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index] = temp_password;
+                    }
+                }
+                else if(password_stage == 1)
+                {
+                    password_stage = 0;
+                    save_long_parameter(current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index);
+                    sprintf(text_parameters[stage_password],"Пароль обновлен");
+                }
+            }
+            else if(current_menu_screen.menu_lines[current_line_index].type == PASSWORD_VERIFY_LINE)
+            {
+                if(temp_password == all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index])
+                {
+                    sprintf(text_parameters[stage_password]," Сброс прошел");
+
+                    if(menu_index == RESET_DEVICE_MENU)
+                    {
+                        reset_parameter();
+                        Serial.println("reset_parameter");
+                    }
+                    else if(menu_index == RESET_COUNTER_MENU)
+                    {
+                        reset_short_counters();
+                        Serial.println("reset_short_counters");
+                    }
+                }
+                else
+                {
+                    sprintf(text_parameters[stage_password],"Неверный пароль");
+                }
+
+                all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index] = temp_password;
             }
         }
     } 
@@ -1486,16 +1586,6 @@ void menu()
         show_cursor();
         need_reload_menu = false;
       }
-      if(all_byte_parameters[reset_device])
-      {
-          if(enable_reset) reset_parameter();
-          all_byte_parameters[reset_device] = 0;
-      }
-      if(all_byte_parameters[reset_counters])
-      {
-          if(enable_reset) reset_short_counters();
-          all_byte_parameters[reset_counters] = 0;
-      }
   }
 
   lcd.clear();
@@ -1615,13 +1705,22 @@ void setup()
   sprintf(text_parameters[time_seance],"");
   menu_index = 0;
 
+  if(!digitalRead(buttonPin_Start))
+  {   // сброс пароля по умолчанию
+      all_long_parameters[password] = 1111;
+      save_long_parameter(password);
+
+      Serial.println("reset password");
+  }
+
   all_long_parameters[money_counter] = 0;
 }
 
 void loop() 
 {
   read_buttons(buttonPin_Service);
-  read_buttons(buttonPin_Start);
+  //read_buttons(buttonPin_Start);
+
   hide_cursor();
   need_hide_cursor = true;
 
