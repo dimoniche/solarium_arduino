@@ -73,6 +73,22 @@ boolean need_clear_menu = false;                    // флаг очистки �
 boolean need_hide_cursor = false;                   // флаг скытия курсора на экране
 boolean start_edit_parameter = false;               // флаг старта редактирования параметра
 
+const PROGMEM char sprintf_format[][SIZE_SCREEN_LINE*2] = {
+  "ver %s %s",
+  "Введите старый",
+  "Введите пароль",
+  "Введите новый",
+  "Неверный пароль",
+  "Пароль обновлен",
+  " Сброс прошел",
+  "Неверный пароль",
+  "%s %d %s  ",
+  "%04ld",
+  "%s%04ld",
+  "не требуется", //11
+  "требуется",    //12
+};
+
 // Переменные для работы с соляриями
 #define pause_before              0
 #define pause_after               1
@@ -115,13 +131,16 @@ const byte all_byte_parameters_default[COUNT_BYTE_PARAMETER] = {
 #define short_time_counter        5
 #define money_counter             6
 #define password                  7
-#define COUNT_LONG_PARAMETER      8
+#define serial_number             8
+#define COUNT_LONG_PARAMETER      9
 unsigned long all_long_parameters[COUNT_LONG_PARAMETER];
 
 #define time_seance               0
 #define time_delay                0
 #define stage_password            0
-#define COUNT_TEXT_PARAMETER      1
+#define version_date              0
+#define service_line              1
+#define COUNT_TEXT_PARAMETER      2
 char text_parameters[COUNT_TEXT_PARAMETER][SIZE_SCREEN_LINE*2];
 
 LiquidCrystal_I2C lcd(0x27, SIZE_SCREEN_LINE, SIZE_SCREEN);                 // устанавливаем адрес 0x27, и дисплей 16 символов 2 строки
@@ -195,6 +214,7 @@ void read_buttons(byte x)
 #define SOLARIUM_MENU_DEV     10
 #define RESET_DEVICE_MENU     11
 #define RESET_COUNTER_MENU    12
+#define DEVICE_SETTING_MENU   13
 
 enum type_menu_line {
   MENU_LINE = 0,
@@ -206,6 +226,8 @@ enum type_menu_line {
   DIGIT_VIEW_LINE,
   PASSWORD_SET_LINE,
   PASSWORD_VERIFY_LINE,
+  INTEGER_PARAM_LINE,
+  STRING_PARAM_LINE,
 };
 
 struct param_limit {
@@ -435,6 +457,11 @@ const menu_screen menu_settings[] PROGMEM = {
         {0}
       },
       {
+        "Устройство",
+        MENU_LINE,
+        {DEVICE_SETTING_MENU}
+      },
+      {
         "Настройки",
         MENU_LINE,
         {SETTING_MENU}
@@ -445,7 +472,7 @@ const menu_screen menu_settings[] PROGMEM = {
         {STATISTIC_MENU}
       }
     },
-    3
+    4
   },
   // Меню 1
   {
@@ -734,7 +761,7 @@ const menu_screen menu_settings[] PROGMEM = {
               0,
               100,
           },
-          "руб"
+          "руб/мин"
         }
       },
     },
@@ -883,6 +910,53 @@ const menu_screen menu_settings[] PROGMEM = {
       },
     },
     3
+  },
+  // Меню 13
+  {
+    {
+      {
+        "УСТРОЙСТВО",
+        FIXED_LINE,
+        {1}
+      },
+      {
+        "SN",
+        DIGIT_VIEW_LINE,
+        {
+          serial_number,
+          {
+              0,
+              9999,
+          },
+          ""
+        }
+      },
+      {
+        "",
+        TEXT_PARAM_LINE,
+        {
+          version_date,
+          {
+              0,
+              0,
+          },
+          ""
+        }
+      },
+      {
+        "Обсл.",
+        TEXT_PARAM_LINE,
+        {
+          service_line,
+          {
+              0,
+              0,
+          },
+          ""
+        }
+      },
+    },
+    4
   },
 };
 
@@ -1145,6 +1219,26 @@ void isButtonDouble(byte x)
         menu_inter++;
         menu_index = current_menu_screen.menu_lines[current_line_index].parameter.menu.next_menu_index;
 
+        if(menu_index == DEVICE_SETTING_MENU)
+        {
+            char format[SIZE_SCREEN_LINE*2];
+            memcpy_P( &format, &sprintf_format[0], SIZE_SCREEN_LINE);
+            char ver[4];
+            memcpy_P( &ver, Device_Ver, 4 );
+            char date[9];
+            memcpy_P( &date, Device_Date, 9 );
+
+            sprintf(text_parameters[version_date],format, ver, date);
+
+            if(block > all_long_parameters[long_money_counter]) {
+              memcpy_P( &format, &sprintf_format[11], SIZE_SCREEN_LINE*2);
+              sprintf(text_parameters[service_line],format);
+            } else {
+              memcpy_P( &format, &sprintf_format[12], SIZE_SCREEN_LINE*2);
+              sprintf(text_parameters[service_line],format);             
+            }
+        }
+
         memcpy_P( &current_menu_screen, &menu_settings[menu_index], sizeof(menu_screen));
         find_first_line_menu();
         lcd.clear();
@@ -1161,7 +1255,10 @@ void isButtonDouble(byte x)
                 temp_password = all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index];
                 all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index] = 0;
                 password_stage = 0;
-                sprintf(text_parameters[stage_password],"Введите старый");
+
+                char format[SIZE_SCREEN_LINE*2];
+                memcpy_P( &format, &sprintf_format[1], SIZE_SCREEN_LINE*2);
+                sprintf(text_parameters[stage_password], format);
                 current_digit = 4;
             }
             else if(current_menu_screen.menu_lines[current_line_index].type == PASSWORD_VERIFY_LINE)
@@ -1169,7 +1266,10 @@ void isButtonDouble(byte x)
                 temp_password = all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index];
                 all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index] = 0;
                 password_stage = 0;
-                sprintf(text_parameters[stage_password],"Введите пароль");
+
+                char format[SIZE_SCREEN_LINE*2];
+                memcpy_P( &format, &sprintf_format[2], SIZE_SCREEN_LINE*2);
+                sprintf(text_parameters[stage_password], format);
                 current_digit = 4;
             }
 
@@ -1198,13 +1298,17 @@ void isButtonDouble(byte x)
                         hide_cursor();
                         need_hide_cursor = true;
 
-                        sprintf(text_parameters[stage_password],"Введите новый");
+                        char format[SIZE_SCREEN_LINE*2];
+                        memcpy_P( &format, &sprintf_format[3], SIZE_SCREEN_LINE*2);
+                        sprintf(text_parameters[stage_password], format);
                         all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index] = 0;
                         password_stage = 1;
                     }
                     else
                     {
-                        sprintf(text_parameters[stage_password],"Неверный пароль");
+                        char format[SIZE_SCREEN_LINE*2];
+                        memcpy_P( &format, &sprintf_format[4], SIZE_SCREEN_LINE*2);
+                        sprintf(text_parameters[stage_password], format);
                         password_stage = 0;
                         all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index] = temp_password;
                     }
@@ -1213,14 +1317,19 @@ void isButtonDouble(byte x)
                 {
                     password_stage = 0;
                     save_long_parameter(current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index);
-                    sprintf(text_parameters[stage_password],"Пароль обновлен");
+
+                    char format[SIZE_SCREEN_LINE*2];
+                    memcpy_P( &format, &sprintf_format[5], SIZE_SCREEN_LINE*2);
+                    sprintf(text_parameters[stage_password], format);
                 }
             }
             else if(current_menu_screen.menu_lines[current_line_index].type == PASSWORD_VERIFY_LINE)
             {
                 if(temp_password == all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index])
                 {
-                    sprintf(text_parameters[stage_password]," Сброс прошел");
+                    char format[SIZE_SCREEN_LINE*2];
+                    memcpy_P( &format, &sprintf_format[6], SIZE_SCREEN_LINE*2);
+                    sprintf(text_parameters[stage_password], format);
 
                     if(menu_index == RESET_DEVICE_MENU)
                     {
@@ -1235,7 +1344,9 @@ void isButtonDouble(byte x)
                 }
                 else
                 {
-                    sprintf(text_parameters[stage_password],"Неверный пароль");
+                    char format[SIZE_SCREEN_LINE*2];
+                    memcpy_P( &format, &sprintf_format[7], SIZE_SCREEN_LINE*2);
+                    sprintf(text_parameters[stage_password], format);
                 }
 
                 all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index] = temp_password;
@@ -1257,7 +1368,8 @@ void show_line(byte index_line)
     else if(current_menu_screen.menu_lines[index_line].type == DIGIT_PARAM_LINE)
     {
         char line[SIZE_SCREEN_LINE * 2];
-        char format[11] = "%s %d %s  ";
+        char format[11];
+        memcpy_P( &format, &sprintf_format[8], 11);
         if(start_edit_parameter && index_line == current_line_index)
         {
            format[2] = '>';
@@ -1272,7 +1384,8 @@ void show_line(byte index_line)
         char line[SIZE_SCREEN_LINE * 2];
         if(start_edit_parameter && index_line == current_line_index)
         {
-          char format[6] = "%04ld";
+          char format[6];
+          memcpy_P( &format, &sprintf_format[9], 6);
           sprintf(line,format, all_long_parameters[current_menu_screen.menu_lines[index_line].parameter.digit.param_index]);
         }
         else
@@ -1286,7 +1399,8 @@ void show_line(byte index_line)
         char line[SIZE_SCREEN_LINE * 2];
         if(start_edit_parameter && index_line == current_line_index)
         {
-          char format[8] = "%s%04ld";
+          char format[8];
+          memcpy_P( &format, &sprintf_format[10], 8);
           sprintf(line,format, "      ", all_long_parameters[current_menu_screen.menu_lines[index_line].parameter.digit.param_index]);
         }
         else
@@ -1322,7 +1436,7 @@ void show_line(byte index_line)
                                   text_parameters[current_menu_screen.menu_lines[index_line].parameter.text.param_index], 
                                   current_menu_screen.menu_lines[index_line].parameter.text.unit);
         lcd.print(convertCyr( utf8rus( line )));
-   }
+    }
 }
 
 /*
@@ -1714,6 +1828,7 @@ void setup()
   }
 
   all_long_parameters[money_counter] = 0;
+  all_long_parameters[serial_number] = Device_SerNum;
 }
 
 void loop() 
