@@ -1107,6 +1107,7 @@ void isButtonHold(byte x)
           if(menu_index == MAIN_MENU) 
           {
               menu_enable = false;
+              sprintf(text_parameters[stage_password],"");
           }
           else
           {
