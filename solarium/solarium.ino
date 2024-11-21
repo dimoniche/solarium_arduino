@@ -5,15 +5,21 @@
 #include <LiquidCrystal_I2C.h>                      // Подключаем библиотеку для работы с LCD
 #include <EEPROMex.h>
 
+// активный уровень кнопок
+#define KEY_LEVEL       1
+
 // ===============================задаем константы =========================================================================
 const byte moneyPin = 2;                            // номер пина, к которому подключён купюроприемник, DB2
 const byte inhibitPin = 4;                          // +Inhibit (зеленый) на купюроприемник, DB4
-//const byte buttonPin_Start = 15;                    // номер входа, подключенный к кнопке "Старт", А0
-//const byte buttonPin_Service = 14;                  // номер входа, подключенный к кнопке "Сервис", А1
-//const byte LEDPin = 13;                             // номер выхода светодиода кнопки Старт, DB13
+#if KEY_LEVEL == 1
 const byte buttonPin_Start = 15;                    // номер входа, подключенный к кнопке "Старт", А0
 const byte buttonPin_Service = 13;                  // номер входа, подключенный к кнопке "Сервис", А1
 const byte LEDPin = 14;                             // номер выхода светодиода кнопки Старт, DB13
+#elif
+const byte buttonPin_Start = 15;                    // номер входа, подключенный к кнопке "Старт", А0
+const byte buttonPin_Service = 14;                  // номер входа, подключенный к кнопке "Сервис", А1
+const byte LEDPin = 13;                             // номер выхода светодиода кнопки Старт, DB13
+#endif
 
 // ноги управления соляриями
 const byte lamp_start_pin = 5;          // Запуск солярия Luxura. Включение ламп солярия FireSun, SunFlower
@@ -147,7 +153,12 @@ LiquidCrystal_I2C lcd(0x27, SIZE_SCREEN_LINE, SIZE_SCREEN);                 // �
 
 void read_buttons(byte x)
 {
+  #if KEY_LEVEL == 1
   boolean reading = !digitalRead(x);
+  #elif
+  boolean reading = digitalRead(x);
+  #endif
+
   int index = (x == buttonPin_Service ? 0 : 1);
 
   if (reading && !lastReading[index])              // проверка первичного нажатия
@@ -1613,7 +1624,11 @@ void get_money ()
 
         digitalWrite(LEDPin, HIGH);                     // зажигаем светодиод 
 
+        #if KEY_LEVEL == 1
         if (digitalRead(buttonPin_Start) == LOW)
+        #elif
+        if (digitalRead(buttonPin_Start) == HIGH)
+        #endif
         {
           digitalWrite(inhibitPin, HIGH);               // выставляем запрет приема монет 
           digitalWrite(LEDPin, LOW);                    // гасим светодиод
