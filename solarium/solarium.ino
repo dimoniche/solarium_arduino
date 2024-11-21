@@ -15,7 +15,7 @@ const byte inhibitPin = 4;                          // +Inhibit (зеленый)
 const byte buttonPin_Start = 15;                    // номер входа, подключенный к кнопке "Старт", А0
 const byte buttonPin_Service = 13;                  // номер входа, подключенный к кнопке "Сервис", А1
 const byte LEDPin = 14;                             // номер выхода светодиода кнопки Старт, DB13
-#elif
+#else
 const byte buttonPin_Start = 15;                    // номер входа, подключенный к кнопке "Старт", А0
 const byte buttonPin_Service = 14;                  // номер входа, подключенный к кнопке "Сервис", А1
 const byte LEDPin = 13;                             // номер выхода светодиода кнопки Старт, DB13
@@ -155,7 +155,7 @@ void read_buttons(byte x)
 {
   #if KEY_LEVEL == 1
   boolean reading = !digitalRead(x);
-  #elif
+  #else
   boolean reading = digitalRead(x);
   #endif
 
@@ -1609,7 +1609,7 @@ void get_money ()
 
         #if KEY_LEVEL == 1
         if (digitalRead(buttonPin_Start) == LOW)
-        #elif
+        #else
         if (digitalRead(buttonPin_Start) == HIGH)
         #endif
         {
@@ -1816,7 +1816,7 @@ void setup()
 
   #if KEY_LEVEL == 1
   if(!digitalRead(buttonPin_Start))
-  #elif
+  #else
   if(digitalRead(buttonPin_Start))
   #endif
   {   // сброс пароля по умолчанию
