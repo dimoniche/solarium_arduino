@@ -402,7 +402,7 @@ const menu_screen menu_main[] PROGMEM = {
         {0}
       },
       {
-        "     ПАУЗА",
+        "  ВЕНТИЛЯЦИЯ",
         FIXED_LINE,
         {0}
       },
@@ -1109,8 +1109,8 @@ void isButtonHold(byte x)
       return;
   }
 
-  if(!menu_enable)
-  {
+  if(!menu_enable && (all_long_parameters[money_counter] == 0) || (bill_enable == false))
+  {   // в меню входим только если нет внесенных денег и не запрещен прием денег, тк идет работа соляриев
       menu_index = MAIN_MENU;
 
       memcpy_P( &current_menu_screen, &menu_settings[menu_index], sizeof(menu_screen));
@@ -1674,7 +1674,13 @@ void get_money ()
               sprintf(text_parameters[time_delay],"%2d", all_byte_parameters[pause_before]);
               lcd.clear();
               show_menu();
-              delay(all_byte_parameters[pause_before] * 1000);
+
+              for(int i = 0; i < all_byte_parameters[pause_before]; i++)
+              {
+                  delay(1000);
+                  sprintf(text_parameters[time_delay],"%2d", all_byte_parameters[pause_before] - i);
+                  show_menu();
+              }
           }
 
           memcpy_P( &current_menu_screen, &menu_main[SEANCE_SCREEN], sizeof(menu_screen));
@@ -1858,7 +1864,7 @@ void loop()
   hide_cursor();
   need_hide_cursor = true;
 
-  if (menu_enable == true)                          // если флаг menu_enable = ИСТИНА, то входим в меню 
+  if (menu_enable == true)
   {
       menu();
       need_reload_menu = true;
@@ -1866,7 +1872,7 @@ void loop()
   }
   else
   {
-    if (bill_enable == true && menu_enable == false)  
+    if (bill_enable == true && menu_enable == false)
     {
         get_money();
     }
