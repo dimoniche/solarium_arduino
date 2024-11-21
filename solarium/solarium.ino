@@ -1834,7 +1834,11 @@ void setup()
   sprintf(text_parameters[time_seance],"");
   menu_index = 0;
 
+  #if KEY_LEVEL == 1
   if(!digitalRead(buttonPin_Start))
+  #elif
+  if(digitalRead(buttonPin_Start))
+  #endif
   {   // сброс пароля по умолчанию
       all_long_parameters[password] = 1111;
       save_long_parameter(password);
