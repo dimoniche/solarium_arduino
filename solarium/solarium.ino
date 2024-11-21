@@ -300,8 +300,7 @@ menu_screen current_menu_screen;
 #define WAIT_BEFORE             1
 #define SEANCE_SCREEN           2
 #define WAIT_AFTER              3
-#define SCREEN_END              4
-#define SCREEN_START_SOL        5
+#define SCREEN_START_SOL        4
 
 /*
   Описание основного меню
@@ -420,22 +419,6 @@ const menu_screen menu_main[] PROGMEM = {
       },
     },
     3
-  },
-  // Меню окончания сеанса
-  {
-    {
-      {
-        "",
-        FIXED_LINE,
-        {0}
-      },
-      {
-        "     КОНЕЦ",
-        FIXED_LINE,
-        {0}
-      },
-    },
-    2
   },
   // Удаленный запуск
   {
@@ -1092,7 +1075,6 @@ void isButtonHoldRepeate(byte x)
                 }
             }
         }
-
         return;
     }
 }
@@ -1762,17 +1744,10 @@ void second_event()
     sprintf(text_parameters[time_seance]," %02d:%02d", minute, second);
     need_reload_menu = true;
 
-    if(menu_index == SCREEN_END && time_remain == 0)
-    {
-        restart_menu();
-    }
     if(menu_index == WAIT_AFTER && time_remain == 0)
     {
         stop_vent_work();
-
-        memcpy_P( &current_menu_screen, &menu_main[SCREEN_END], sizeof(menu_screen));
-        menu_index = SCREEN_END;
-        second = 10;
+        restart_menu();
 
         need_clear_menu = true;
         need_reload_menu = true;
@@ -1783,9 +1758,7 @@ void second_event()
 
         if(all_byte_parameters[solarium_type] == LUXURA_SOL)
         {
-            memcpy_P( &current_menu_screen, &menu_main[SCREEN_END], sizeof(menu_screen));
-            menu_index = SCREEN_END;
-            second = 10;
+            restart_menu();
         }
         else
         {
