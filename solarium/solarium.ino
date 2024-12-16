@@ -239,6 +239,7 @@ enum type_menu_line {
   PASSWORD_VERIFY_LINE,
   INTEGER_PARAM_LINE,
   STRING_PARAM_LINE,
+  DIGIT_INT_VIEW_LINE,
 };
 
 struct param_limit {
@@ -310,9 +311,16 @@ const menu_screen menu_main[] PROGMEM = {
   {
     {
       {
-        "",
-        FIXED_LINE,
-        {0}
+        " ЦЕНА",
+        DIGIT_INT_VIEW_LINE,
+        {
+          price,
+          {
+              0,
+              0,
+          },
+          "руб/мин"
+        }
       },
       {
         "  ВНЕСЕНО",
@@ -338,14 +346,26 @@ const menu_screen menu_main[] PROGMEM = {
           " "
         }
       },
+      {
+        "",
+        TEXT_PARAM_LINE,
+        {
+          service_line,
+          {
+              0,
+              0,
+          },
+          " "
+        }
+      },
     },
-    3
+    4
   },
   // Время задержки до
   {
     {
       {
-        "",
+        " ДО СТАРТА",
         FIXED_LINE,
         {0}
       },
@@ -373,7 +393,7 @@ const menu_screen menu_main[] PROGMEM = {
         {0}
       },
       {
-        "      CEAHC",
+        " СЕАНС ЗАГАРА",
         FIXED_LINE,
         {0}
       },
@@ -1123,6 +1143,87 @@ void isButtonHold(byte x)
               digitalWrite(LEDPin, HIGH);
               lcd.clear();
           }
+      } else {
+          if(current_menu_screen.menu_lines[current_line_index].type == DIGIT_PARAM_LINE
+          || current_menu_screen.menu_lines[current_line_index].type == LIST_PARAM_LINE
+          || current_menu_screen.menu_lines[current_line_index].type == PASSWORD_SET_LINE
+          || current_menu_screen.menu_lines[current_line_index].type == PASSWORD_VERIFY_LINE)
+          {
+            start_edit_parameter = false;
+            need_hide_cursor = false;
+
+            if(current_menu_screen.menu_lines[current_line_index].type == DIGIT_PARAM_LINE)
+            {
+                save_byte_parameter(current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index);
+            }
+            else if(current_menu_screen.menu_lines[current_line_index].type == LIST_PARAM_LINE)
+            {
+                save_byte_parameter(current_menu_screen.menu_lines[current_line_index].parameter.list.param_index);
+            }
+            else if(current_menu_screen.menu_lines[current_line_index].type == PASSWORD_SET_LINE)
+            {
+                if(password_stage == 0)
+                {
+                    if(temp_password == all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index])
+                    {
+                        start_edit_parameter = true;
+                        hide_cursor();
+                        need_hide_cursor = true;
+
+                        char format[SIZE_SCREEN_LINE*2];
+                        memcpy_P( &format, &sprintf_format[3], SIZE_SCREEN_LINE*2);
+                        sprintf(text_parameters[stage_password], format);
+                        all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index] = 0;
+                        password_stage = 1;
+                    }
+                    else
+                    {
+                        char format[SIZE_SCREEN_LINE*2];
+                        memcpy_P( &format, &sprintf_format[4], SIZE_SCREEN_LINE*2);
+                        sprintf(text_parameters[stage_password], format);
+                        password_stage = 0;
+                        all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index] = temp_password;
+                    }
+                }
+                else if(password_stage == 1)
+                {
+                    password_stage = 0;
+                    save_long_parameter(current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index);
+
+                    char format[SIZE_SCREEN_LINE*2];
+                    memcpy_P( &format, &sprintf_format[5], SIZE_SCREEN_LINE*2);
+                    sprintf(text_parameters[stage_password], format);
+                }
+            }
+            else if(current_menu_screen.menu_lines[current_line_index].type == PASSWORD_VERIFY_LINE)
+            {
+                if(temp_password == all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index])
+                {
+                    char format[SIZE_SCREEN_LINE*2];
+                    memcpy_P( &format, &sprintf_format[6], SIZE_SCREEN_LINE*2);
+                    sprintf(text_parameters[stage_password], format);
+
+                    if(menu_index == RESET_DEVICE_MENU)
+                    {
+                        reset_parameter();
+                        Serial.println("reset_parameter");
+                    }
+                    else if(menu_index == RESET_COUNTER_MENU)
+                    {
+                        reset_short_counters();
+                        Serial.println("reset_short_counters");
+                    }
+                }
+                else
+                {
+                    char format[SIZE_SCREEN_LINE*2];
+                    memcpy_P( &format, &sprintf_format[7], SIZE_SCREEN_LINE*2);
+                    sprintf(text_parameters[stage_password], format);
+                }
+
+                all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index] = temp_password;
+            }
+          }
       }
   }
 }
@@ -1134,7 +1235,7 @@ void isButtonSingle(byte x)
 {
   need_reload_menu = true;
 
-  if(start_edit_parameter && (x == buttonPin_Start || x == buttonPin_Service))
+  if(start_edit_parameter && x == buttonPin_Start)
   {
       if(current_menu_screen.menu_lines[current_line_index].type == DIGIT_PARAM_LINE)
       {
@@ -1154,23 +1255,36 @@ void isButtonSingle(byte x)
       if(current_menu_screen.menu_lines[current_line_index].type == PASSWORD_SET_LINE
       || current_menu_screen.menu_lines[current_line_index].type == PASSWORD_VERIFY_LINE)
       {
-          if(x == buttonPin_Service)
+          if(--current_digit == 0) { current_digit = 4; }
+      }
+  }
+  else if(start_edit_parameter && x == buttonPin_Service)
+  {
+      if(current_menu_screen.menu_lines[current_line_index].type == PASSWORD_SET_LINE
+      || current_menu_screen.menu_lines[current_line_index].type == PASSWORD_VERIFY_LINE)
+      {
+          byte dig = current_digit - 1;
+          int scale = 1;
+
+          while(dig--) { scale *= 10; }
+
+          switch(current_digit - 1)
           {
-            byte dig = current_digit - 1;
-            int scale = 1;
-
-            while(dig--) { scale *= 10; }
-
-            all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index] += scale;
-
-            Serial.print(all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index]);
-            Serial.println("");
-            Serial.print(temp_password);
+             case 0:
+                if(all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index] % 10 >= 9) scale = -9;
+             break;
+             case 1:
+                if(all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index] % 100 >= 90) scale = -90;
+             break;
+             case 2:
+                if(all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index] % 1000 >= 900) scale = -900;
+             break;
+             case 3:
+                if(all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index] % 10000 >= 9000) scale = -9000;
+             break;
           }
-          else
-          {
-            if(--current_digit == 0) { current_digit = 4; }
-          }
+
+          all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index] += scale;
       }
   }
   else if(x == buttonPin_Service)
@@ -1270,81 +1384,6 @@ void isButtonDouble(byte x)
             start_edit_parameter = true;
             hide_cursor();
             need_hide_cursor = true;
-        } else {
-            start_edit_parameter = false;
-            need_hide_cursor = false;
-
-            if(current_menu_screen.menu_lines[current_line_index].type == DIGIT_PARAM_LINE)
-            {
-                save_byte_parameter(current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index);
-            }
-            else if(current_menu_screen.menu_lines[current_line_index].type == LIST_PARAM_LINE)
-            {
-                save_byte_parameter(current_menu_screen.menu_lines[current_line_index].parameter.list.param_index);
-            }
-            else if(current_menu_screen.menu_lines[current_line_index].type == PASSWORD_SET_LINE)
-            {
-                if(password_stage == 0)
-                {
-                    if(temp_password == all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index])
-                    {
-                        start_edit_parameter = true;
-                        hide_cursor();
-                        need_hide_cursor = true;
-
-                        char format[SIZE_SCREEN_LINE*2];
-                        memcpy_P( &format, &sprintf_format[3], SIZE_SCREEN_LINE*2);
-                        sprintf(text_parameters[stage_password], format);
-                        all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index] = 0;
-                        password_stage = 1;
-                    }
-                    else
-                    {
-                        char format[SIZE_SCREEN_LINE*2];
-                        memcpy_P( &format, &sprintf_format[4], SIZE_SCREEN_LINE*2);
-                        sprintf(text_parameters[stage_password], format);
-                        password_stage = 0;
-                        all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index] = temp_password;
-                    }
-                }
-                else if(password_stage == 1)
-                {
-                    password_stage = 0;
-                    save_long_parameter(current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index);
-
-                    char format[SIZE_SCREEN_LINE*2];
-                    memcpy_P( &format, &sprintf_format[5], SIZE_SCREEN_LINE*2);
-                    sprintf(text_parameters[stage_password], format);
-                }
-            }
-            else if(current_menu_screen.menu_lines[current_line_index].type == PASSWORD_VERIFY_LINE)
-            {
-                if(temp_password == all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index])
-                {
-                    char format[SIZE_SCREEN_LINE*2];
-                    memcpy_P( &format, &sprintf_format[6], SIZE_SCREEN_LINE*2);
-                    sprintf(text_parameters[stage_password], format);
-
-                    if(menu_index == RESET_DEVICE_MENU)
-                    {
-                        reset_parameter();
-                        Serial.println("reset_parameter");
-                    }
-                    else if(menu_index == RESET_COUNTER_MENU)
-                    {
-                        reset_short_counters();
-                        Serial.println("reset_short_counters");
-                    }
-                }
-                else
-                {
-                    char format[SIZE_SCREEN_LINE*2];
-                    memcpy_P( &format, &sprintf_format[7], SIZE_SCREEN_LINE*2);
-                    sprintf(text_parameters[stage_password], format);
-                }
-
-                all_long_parameters[current_menu_screen.menu_lines[current_line_index].parameter.digit.param_index] = temp_password;
-            }
         }
     } 
 }
@@ -1430,6 +1469,14 @@ void show_line(byte index_line)
                                   text_parameters[current_menu_screen.menu_lines[index_line].parameter.text.param_index], 
                                   current_menu_screen.menu_lines[index_line].parameter.text.unit);
         lcd.print(convertCyr( utf8rus( line )));
+    }
+    else if(current_menu_screen.menu_lines[index_line].type == DIGIT_INT_VIEW_LINE)
+    {
+        char line[SIZE_SCREEN_LINE * 2];
+        sprintf(line,"%s %d %s", current_menu_screen.menu_lines[index_line].string,
+                                 all_byte_parameters[current_menu_screen.menu_lines[index_line].parameter.digit.param_index],
+                                 current_menu_screen.menu_lines[index_line].parameter.digit.unit);
+        lcd.print(convertCyr( utf8rus( line )));        
     }
 }
 
@@ -1604,6 +1651,7 @@ void get_money ()
     {
         // достаточно денег для оказания услуги
         sprintf(text_parameters[time_seance],"СЕАНС %02d:%02d МИН", minute, second);
+        sprintf(text_parameters[service_line]," НАЖМИТЕ СТАРТ");
 
         digitalWrite(LEDPin, HIGH);                     // зажигаем светодиод 
 
@@ -1677,6 +1725,10 @@ void get_money ()
           // Запускаем работу солярия
           start_solarium_work();
         }
+    }
+    else
+    {
+       sprintf(text_parameters[service_line]," Внесите оплату");
     }
 }
 
