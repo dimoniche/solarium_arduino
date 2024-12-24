@@ -93,6 +93,14 @@ const PROGMEM char sprintf_format[][SIZE_SCREEN_LINE*2] = {
   "%s%04ld",
   "не требуется", //11
   "требуется",    //12
+  "      0000",   //13
+  "%s %s  ",      //14
+  "%s %ld %s",    //15
+  "%s %s %s",     //16
+  "%s %d %s",     //17
+  "CEAHC %02d:%02d MИH", //18
+  " HAЖМИTE CTAPT", //19
+  " ВНЕСИТЕ ОПЛАТУ", //20
 };
 
 // Переменные для работы с соляриями
@@ -319,7 +327,7 @@ const menu_screen menu_main[] PROGMEM = {
               0,
               0,
           },
-          "руб/мин"
+          "pyб/mин"
         }
       },
       {
@@ -331,7 +339,7 @@ const menu_screen menu_main[] PROGMEM = {
               0,
               0,
           },
-          "руб"
+          "pyб"
         }
       },
       {
@@ -562,7 +570,7 @@ const menu_screen menu_settings[] PROGMEM = {
               0,
               100,
           },
-          "сек"
+          "ceк"
         }
       },
       {
@@ -589,7 +597,7 @@ const menu_screen menu_settings[] PROGMEM = {
         {0}
       },
       {
-        "Руб/имп",
+        "Pyб/иmп",
         DIGIT_PARAM_LINE,
         {
           weight_impulse,
@@ -775,7 +783,7 @@ const menu_screen menu_settings[] PROGMEM = {
               0,
               100,
           },
-          "руб/мин"
+          "pyб/mин"
         }
       },
     },
@@ -1438,14 +1446,17 @@ void show_line(byte index_line)
         }
         else
         {
-          sprintf(line,"      0000");
+          char format[11];
+          memcpy_P( &format, &sprintf_format[13], 10);
+          sprintf(line,format);
         }
         lcd.print(convertCyr( utf8rus( line )));        
     }
     else if(current_menu_screen.menu_lines[index_line].type == LIST_PARAM_LINE)
     {
         char line[SIZE_SCREEN_LINE * 2];
-        char format[8] = "%s %s  ";
+        char format[8];
+        memcpy_P( &format, &sprintf_format[14], 8);
         if(start_edit_parameter && index_line == current_line_index)
         {
            format[2] = '>';
@@ -1457,7 +1468,10 @@ void show_line(byte index_line)
     else if(current_menu_screen.menu_lines[index_line].type == DIGIT_VIEW_LINE)
     {
         char line[SIZE_SCREEN_LINE * 2];
-        sprintf(line,"%s %ld %s", current_menu_screen.menu_lines[index_line].string,
+        char format[10];
+        memcpy_P( &format, &sprintf_format[15], 10);
+
+        sprintf(line,format, current_menu_screen.menu_lines[index_line].string,
                                  all_long_parameters[current_menu_screen.menu_lines[index_line].parameter.digit.param_index],
                                  current_menu_screen.menu_lines[index_line].parameter.digit.unit);
         lcd.print(convertCyr( utf8rus( line )));
@@ -1465,7 +1479,10 @@ void show_line(byte index_line)
     else if(current_menu_screen.menu_lines[index_line].type == TEXT_PARAM_LINE)
     {
         char line[SIZE_SCREEN_LINE * 2];
-        sprintf(line,"%s %s %s", current_menu_screen.menu_lines[index_line].string, 
+        char format[9];
+        memcpy_P( &format, &sprintf_format[16], 9);
+
+        sprintf(line,format, current_menu_screen.menu_lines[index_line].string, 
                                   text_parameters[current_menu_screen.menu_lines[index_line].parameter.text.param_index], 
                                   current_menu_screen.menu_lines[index_line].parameter.text.unit);
         lcd.print(convertCyr( utf8rus( line )));
@@ -1473,7 +1490,10 @@ void show_line(byte index_line)
     else if(current_menu_screen.menu_lines[index_line].type == DIGIT_INT_VIEW_LINE)
     {
         char line[SIZE_SCREEN_LINE * 2];
-        sprintf(line,"%s %d %s", current_menu_screen.menu_lines[index_line].string,
+        char format[9];
+        memcpy_P( &format, &sprintf_format[17], 9);
+
+        sprintf(line,format, current_menu_screen.menu_lines[index_line].string,
                                  all_byte_parameters[current_menu_screen.menu_lines[index_line].parameter.digit.param_index],
                                  current_menu_screen.menu_lines[index_line].parameter.digit.unit);
         lcd.print(convertCyr( utf8rus( line )));        
@@ -1649,9 +1669,14 @@ void get_money ()
   
     if (all_long_parameters[money_counter] >= all_byte_parameters[price])
     {
+        char format[30];
+        memcpy_P( &format, &sprintf_format[18], 30);
+
         // достаточно денег для оказания услуги
-        sprintf(text_parameters[time_seance],"СЕАНС %02d:%02d МИН", minute, second);
-        sprintf(text_parameters[service_line]," НАЖМИТЕ СТАРТ");
+        sprintf(text_parameters[time_seance], format, minute, second);
+
+        memcpy_P( &format, &sprintf_format[19], 30);
+        sprintf(text_parameters[service_line], format);
 
         digitalWrite(LEDPin, HIGH);                     // зажигаем светодиод 
 
@@ -1728,7 +1753,9 @@ void get_money ()
     }
     else
     {
-       sprintf(text_parameters[service_line]," Внесите оплату");
+       char format[30];
+       memcpy_P( &format, &sprintf_format[20], 30);
+       sprintf(text_parameters[service_line], format);
     }
 }
 
