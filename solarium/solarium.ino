@@ -8,6 +8,9 @@
 // активный уровень кнопок
 #define KEY_LEVEL       1
 
+// максимальное время работы солярия
+#define MAX_TIME_SOLARIUM_WORK    20
+
 // ===============================задаем константы =========================================================================
 const byte moneyPin = 2;                            // номер пина, к которому подключён купюроприемник, DB2
 const byte inhibitPin = 4;                          // +Inhibit (зеленый) на купюроприемник, DB4
@@ -78,6 +81,7 @@ boolean need_reload_menu = true;                    // флаг перерисо
 boolean need_clear_menu = false;                    // флаг очистки экрана
 boolean need_hide_cursor = false;                   // флаг скытия курсора на экране
 boolean start_edit_parameter = false;               // флаг старта редактирования параметра
+boolean solarium_work = false;                      // флаг работы соляриев
 
 const PROGMEM char sprintf_format[][SIZE_SCREEN_LINE*2] = {
   "ver %s %s",
@@ -89,11 +93,11 @@ const PROGMEM char sprintf_format[][SIZE_SCREEN_LINE*2] = {
   " Сброс прошел",
   "Неверный пароль",
   "%s %d %s  ",
-  "%04ld",
-  "%s%04ld",
+  "%04ld",        //9
+  "      %04ld",  //10
   "не требуется", //11
   "требуется",    //12
-  "      0000",   //13
+  "      0000 ",   //13
   "%s %s  ",      //14
   "%s %ld %s",    //15
   "%s %s %s",     //16
@@ -121,20 +125,25 @@ const PROGMEM char sprintf_format[][SIZE_SCREEN_LINE*2] = {
 #define UV_COLLATEN_REGIME        2
 
 #define work_regime               5
+
+#define HIGH_RELAY                0
+#define LOW_RELAY                 1
+
 #define signal_rele               6
+
 #define weight_impulse            7
 #define COUNT_BYTE_PARAMETER      8
 byte all_byte_parameters[COUNT_BYTE_PARAMETER];
 
 const byte all_byte_parameters_default[COUNT_BYTE_PARAMETER] = {
-  30,
-  3,
-  20,
-  0,
-  0,
-  0,
-  0,
-  10,
+  30,   // pause_before
+  3,    // pause_after
+  20,   // price
+  0,    // remote_start
+  LUXURA_SOL,    // solarium_type
+  COLLATEN_REGIME,    // work_regime
+  LOW_RELAY,    // signal_rele
+  10,   // weight_impulse
 };
 
 #define long_starts_counter       0
@@ -373,7 +382,7 @@ const menu_screen menu_main[] PROGMEM = {
   {
     {
       {
-        " ДО СТАРТА",
+        "  ДО СТАРТА",
         FIXED_LINE,
         {0}
       },
@@ -401,7 +410,7 @@ const menu_screen menu_main[] PROGMEM = {
         {0}
       },
       {
-        " СЕАНС ЗАГАРА",
+        "  СЕАНС ЗАГАРА",
         FIXED_LINE,
         {0}
       },
@@ -1112,6 +1121,12 @@ void isButtonHoldRepeate(byte x)
 */
 void isButtonHold(byte x)
 {
+  if(solarium_work == true)
+  {
+      // если работают солярии вход в меню запрещен
+      return;
+  }
+
   need_reload_menu = true;
 
   if(x == buttonPin_Start)
@@ -1440,14 +1455,14 @@ void show_line(byte index_line)
         char line[SIZE_SCREEN_LINE * 2];
         if(start_edit_parameter && index_line == current_line_index)
         {
-          char format[8];
-          memcpy_P( &format, &sprintf_format[10], 8);
-          sprintf(line,format, "      ", all_long_parameters[current_menu_screen.menu_lines[index_line].parameter.digit.param_index]);
+          char format[11];
+          memcpy_P( &format, &sprintf_format[10], 11);
+          sprintf(line, format, all_long_parameters[current_menu_screen.menu_lines[index_line].parameter.digit.param_index]);
         }
         else
         {
           char format[11];
-          memcpy_P( &format, &sprintf_format[13], 10);
+          memcpy_P( &format, &sprintf_format[13], 11);
           sprintf(line,format);
         }
         lcd.print(convertCyr( utf8rus( line )));        
@@ -1572,6 +1587,8 @@ bool read_money_impulse ()
 */
 void start_solarium_work()
 {
+    solarium_work = true;
+
     switch(all_byte_parameters[solarium_type])
     {
         case LUXURA_SOL:
@@ -1634,6 +1651,8 @@ void stop_solarium_work()
         digitalWrite(lamp_start_pin, LOW);
       break;
     }
+
+    solarium_work = false;
 }
 
 /*
@@ -1679,6 +1698,13 @@ void get_money ()
         sprintf(text_parameters[service_line], format);
 
         digitalWrite(LEDPin, HIGH);                     // зажигаем светодиод 
+
+        // Достигли максимального времени загара
+        if(minute >= MAX_TIME_SOLARIUM_WORK)
+        {
+          digitalWrite(inhibitPin, HIGH);               // выставляем запрет приема монет 
+          digitalWrite(LEDPin, LOW);                    // гасим светодиод
+        }
 
         #if KEY_LEVEL == 1
         if (digitalRead(buttonPin_Start) == LOW)
@@ -1836,16 +1862,9 @@ void second_event()
     {
         stop_solarium_work();
 
-        if(all_byte_parameters[solarium_type] == LUXURA_SOL)
-        {
-            restart_menu();
-        }
-        else
-        {
-            memcpy_P( &current_menu_screen, &menu_main[WAIT_AFTER], sizeof(menu_screen));
-            menu_index = WAIT_AFTER;
-            minute = all_byte_parameters[pause_after];
-        }
+        memcpy_P( &current_menu_screen, &menu_main[WAIT_AFTER], sizeof(menu_screen));
+        menu_index = WAIT_AFTER;
+        minute = all_byte_parameters[pause_after];
 
         need_clear_menu = true;
         need_reload_menu = true;
